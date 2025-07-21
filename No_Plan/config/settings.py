@@ -36,8 +36,13 @@ SOCIALACCOUNT_PROVIDERS = {
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-
-ALLOWED_HOSTS = [os.getenv('ALLOWED_HOSTS')]
+allowed_hosts_str = os.getenv('ALLOWED_HOSTS')
+if allowed_hosts_str:
+    # .env 파일에서 가져온 문자열을 쉼표로 쪼개고, 각 항목의 공백을 제거하여 리스트로 만듭니다.
+    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_str.split(',')]
+else:
+    # .env 파일에 ALLOWED_HOSTS가 정의되지 않았을 경우를 대비한 기본값
+    ALLOWED_HOSTS = []
 
 # Application definition
 INSTALLED_APPS = [
