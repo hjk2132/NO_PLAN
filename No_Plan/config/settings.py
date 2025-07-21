@@ -17,6 +17,12 @@ TOUR_API_SERVICE_KEY = os.getenv('TOUR_API_SERVICE_KEY')
 # 카카오 API KEY (REST형, 모바일은 다른 키 필요)
 KAKAO_API_KEY = os.getenv('KAKAO_API_KEY')
 
+# Daum Blog 검색을 위한 Kakao REST API KEY
+DAUM_API_KEY = os.getenv('DAUM_API_KEY')
+
+# OpenAI API 키
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
 # 카카오 소셜 로그인 설정
 SOCIALACCOUNT_PROVIDERS = {
     'kakao': {
@@ -60,6 +66,7 @@ INSTALLED_APPS = [
     #user apps
     'users.apps.LogInConfig',
     'tour_api.apps.TourApiConfig',
+    'ai.apps.AiConfig',
 ]
 
 AUTHENTICATION_BACKENDS = (
