@@ -6,9 +6,23 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 import tiktoken
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 from sklearn.metrics.pairwise import cosine_similarity
 from django.conf import settings
+
+
+# --- Semaphore를 사용하기 위한 헬퍼 함수 ---
+async def gather_with_concurrency(limit, *tasks):
+    """
+    동시 실행 개수를 제어하면서 asyncio.gather를 실행하는 헬퍼 함수
+    """
+    semaphore = asyncio.Semaphore(limit)
+
+    async def sem_task(task):
+        async with semaphore:
+            return await task
+
+    return await asyncio.gather(*(sem_task(task) for task in tasks))
 
 
 class BlogCrawler:
@@ -72,76 +86,53 @@ class BlogCrawler:
             print(f"Daum API request failed for '{name}': {e}")
             return []
 
-    # --- 핵심 수정 ---
-    # 1. 단일 장소의 '검색->크롤링->결합' 로직을 처리하는 비동기 헬퍼 함수를 추가합니다.
-    async def _crawl_and_process_place(self, session: aiohttp.ClientSession, api_key: str,
-                                       place_info: tuple[str, str, str]) -> dict:
-        """단일 장소에 대한 블로그 검색, 크롤링, 텍스트 결합을 수행합니다."""
-        contentid, name, addr = place_info
-
-        # 각 장소의 블로그 URL 검색
-        urls = await self._search_blogs_aio(session, api_key, name)
-
-        # 검색된 URL들 크롤링
-        if not urls:
-            combined_text = self.placeholder
-        else:
-            # 해당 장소의 블로그 5개를 동시에 크롤링합니다.
-            crawl_tasks = [self.get_text(session, url) for url in urls]
-            crawled_texts = await asyncio.gather(*crawl_tasks)
-            truncated_texts = [self.truncate(text) for text in crawled_texts]
-            combined_text = " ".join(truncated_texts)
-
-        # contentid와 함께 결과 딕셔너리를 반환합니다.
-        return {
-            "contentid": contentid,
-            "관광지명": name,
-            "텍스트": combined_text
-        }
-
-    # 2. crawl_all 메소드를 수정하여 위 헬퍼 함수를 병렬로 실행합니다.
     async def crawl_all(self, place_infos_with_id: list[tuple[str, str, str]]) -> pd.DataFrame:
-        """
-        (contentid, title, address) 튜플 리스트를 받아, 모든 장소에 대한 블로그
-        크롤링을 병렬로 수행하고 contentid를 포함한 DataFrame을 반환합니다.
-        """
         daum_api_key = settings.DAUM_API_KEY
 
+        # 각 장소에 대한 전체 처리 프로세스를 동시 30개로 제한
+        CONCURRENCY_LIMIT_PLACES = 30
+
+        async def process_place(contentid, name, addr, session):
+            urls = await self._search_blogs_aio(session, daum_api_key, name)
+            if not urls:
+                combined_text = self.placeholder
+            else:
+                crawl_tasks = [self.get_text(session, url) for url in urls]
+                # 각 장소 내부의 블로그 크롤링은 동시 5개로 제한
+                crawled_texts = await gather_with_concurrency(5, *crawl_tasks)
+                truncated_texts = [self.truncate(text) for text in crawled_texts]
+                combined_text = " ".join(truncated_texts)
+            return {"contentid": contentid, "관광지명": name, "텍스트": combined_text}
+
         async with aiohttp.ClientSession() as session:
-            # 3. 모든 장소에 대한 작업(Task) 리스트를 생성합니다.
-            #    이 시점에서는 코드가 실행되지 않고, 계획만 세워둡니다.
-            tasks = [
-                self._crawl_and_process_place(session, daum_api_key, place_info)
-                for place_info in place_infos_with_id
-            ]
-
-            # 4. asyncio.gather를 사용하여 모든 작업을 병렬로 실행하고 결과를 한 번에 받습니다.
-            #    이 부분이 성능 향상의 핵심입니다.
-            final_results = await asyncio.gather(*tasks)
-
-        # 결과가 비어있는 경우를 대비한 방어 코드
-        if not final_results:
-            return pd.DataFrame(columns=["contentid", "관광지명", "텍스트"])
+            tasks = [process_place(cid, n, a, session) for cid, n, a in place_infos_with_id]
+            final_results = await gather_with_concurrency(CONCURRENCY_LIMIT_PLACES, *tasks)
 
         return pd.DataFrame(final_results)
 
 
 class RecommendationEngine:
-    def __init__(self, embedding_model: str = "text-embedding-3-small", chat_model: str = "gpt-3.5-turbo",
+    def __init__(self, embedding_model: str = "text-embedding-3-small", chat_model: str = "gpt-4.1-nano",
                  top_k: int = 5):
         api_key = settings.OPENAI_API_KEY
-        self.embed_client = OpenAI(api_key=api_key)
-        self.chat_client = AsyncOpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(api_key=api_key)
         self.embedding_model = embedding_model
         self.chat_model = chat_model
         self.top_k = top_k
 
-    def get_embedding(self, text: list[str]) -> list[list[float]]:
-        res = self.embed_client.embeddings.create(input=text, model=self.embedding_model)
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if hasattr(self.client, 'close'):
+            await self.client.close()
+
+    async def get_embedding(self, text: list[str]) -> list[list[float]]:
+        res = await self.client.embeddings.create(input=text, model=self.embedding_model)
         return [list(r.embedding) for r in res.data]
 
-    def get_query_embedding(self, text: str) -> list[float]:
-        response = self.embed_client.embeddings.create(input=[text], model=self.embedding_model)
+    async def get_query_embedding(self, text: str) -> list[float]:
+        response = await self.client.embeddings.create(input=[text], model=self.embedding_model)
         return response.data[0].embedding
 
     @staticmethod
@@ -169,9 +160,9 @@ class RecommendationEngine:
 2. 해시태그: #(명사/형용사) #(명사/형용사) #(명사/형용사) #(명사/형용사)
 """
         try:
-            resp = await self.chat_client.chat.completions.create(model=self.chat_model,
-                                                                  messages=[{"role": "user", "content": prompt}],
-                                                                  temperature=0.7, max_tokens=200)
+            resp = await self.client.chat.completions.create(model=self.chat_model,
+                                                             messages=[{"role": "user", "content": prompt}],
+                                                             temperature=0.7, max_tokens=200)
             text = resp.choices[0].message.content.strip()
             reason = re.search(r"추천 이유[:：]\s*(.+)", text)
             tags = re.search(r"해시태그[:：]\s*(.+)", text)
@@ -205,6 +196,10 @@ class RecommendationEngine:
         for _, row in df_copy.iterrows():
             summary = self.extract_context_around_place(row["텍스트"], row["관광지명"], window=2, max_length=1500)
             tasks.append(self.generate_reason_and_hashtags(row["관광지명"], adj_str, summary))
-        results = await asyncio.gather(*tasks)
+
+        # OpenAI API는 Rate Limit이 엄격하므로, 동시 요청을 10개로 제한합니다.
+        CONCURRENCY_LIMIT = 10
+        results = await gather_with_concurrency(CONCURRENCY_LIMIT, *tasks)
+
         df_copy["추천이유"], df_copy["해시태그"] = zip(*results)
         return df_copy
