@@ -122,39 +122,51 @@ python manage.py runserver
 
 이제 `http://127.0.0.1:8000` 주소로 서버에 접속할 수 있습니다.
 
----
 
 ## 📖 주요 API 엔드포인트
 
-- **Base URL**: `/api/v1/`
+-   **Base URL**: `/api/v1/`
 
-### 사용자 (`/users/`)
+### 사용자 및 데이터 관리 (`/users/`)
 
-| Method | URL                      | 설명                           | 인증 필요 |
-| ------ | ------------------------ | ------------------------------ | --------- |
-| POST   | `/register/`             | 이메일 회원가입                | ❌        |
-| POST   | `/login/`                | 이메일 로그인                  | ❌        |
-| POST   | `/logout/`               | 로그아웃                       | ✅        |
-| GET    | `/kakao/`                | 카카오 소셜 로그인             | ❌        |
-| GET    | `/me/`                   | 내 정보 조회                   | ✅        |
-| POST   | `/me/info/`              | 내 추가 정보(나이,성별) 등록   | ✅        |
-| GET    | `/trips/`                | 내 여행 목록 조회              | ✅        |
-| POST   | `/trips/`                | 새 여행 생성                   | ✅        |
-| GET    | `/bookmarks/`            | 내 북마크 목록 조회            | ✅        |
-| POST   | `/bookmarks/`            | 북마크 추가                    | ✅        |
-| DELETE | `/bookmarks/<int:pk>/`   | 북마크 삭제                    | ✅        |
+| Method | URL | 설명 | 인증 필요 |
+| :--- | :--- | :--- | :---: |
+| **인증** | | | |
+| POST | `/register/` | 이메일 회원가입 | ❌ |
+| POST | `/login/` | 이메일 로그인 | ❌ |
+| GET | `/kakao/` | 카카오 소셜 로그인 | ❌ |
+| POST | `/logout/` | 로그아웃 | ✅ |
+| POST | `/token/refresh/` | Access Token 재발급 | ❌ |
+| **계정 관리** | | | |
+| GET | `/me/` | 내 정보 조회 | ✅ |
+| PUT | `/set_name/` | 내 이름 설정/변경 | ✅ |
+| POST | `/password/change/` | 비밀번호 변경 | ✅ |
+| DELETE | `/me/withdraw/` | 회원 탈퇴 | ✅ |
+| **추가 정보** | | | |
+| GET | `/me/info/` | 내 추가 정보(나이,성별) 조회 | ✅ |
+| POST | `/me/info/` | 내 추가 정보 등록 | ✅ |
+| PUT / PATCH | `/me/info/` | 내 추가 정보 수정 | ✅ |
+| **여행 및 방문 기록** | | | |
+| GET | `/trips/` | 내 여행 목록 조회 | ✅ |
+| POST | `/trips/` | 새 여행 생성 | ✅ |
+| GET | `/visited-contents/` | 방문한 장소 목록 조회 | ✅ |
+| POST | `/visited-contents/` | 방문한 장소 저장 | ✅ |
+| **북마크** | | | |
+| GET | `/bookmarks/` | 내 북마크 목록 조회 | ✅ |
+| POST | `/bookmarks/` | 북마크 추가 | ✅ |
+| DELETE | `/bookmarks/<int:pk>/` | 북마크 삭제 | ✅ |
 
-### 여행지 추천 (`/tours/`)
+### 여행지 추천 및 유틸리티
 
-| Method | URL                | 설명                                 | 인증 필요 |
-| ------ | ------------------ | ------------------------------------ | --------- |
-| GET    | `/restaurants/`    | 주변 식당 추천 (AI 또는 거리순)      | ❌        |
-| GET    | `/cafes/`          | 주변 카페 추천 (AI 또는 거리순)      | ❌        |
-| GET    | `/attractions/`    | 주변 관광지 추천 (AI 또는 거리순)    | ❌        |
-| GET    | `/accommodations/` | 주변 숙소 추천 (AI 또는 거리순)      | ❌        |
-| GET    | `/detail/<int:id>/`| 특정 장소 상세 정보 조회             | ❌        |
+| Method | URL | 설명 | 인증 필요 |
+| :--- | :--- | :--- | :---: |
+| GET | `/tours/restaurants/` | 주변 식당 추천 (AI 또는 거리순) | ❌ |
+| GET | `/tours/cafes/` | 주변 카페 추천 (AI 또는 거리순) | ❌ |
+| GET | `/tours/attractions/` | 주변 관광지 추천 (AI 또는 거리순) | ❌ |
+| GET | `/tours/accommodations/`| 주변 숙소 추천 (AI 또는 거리순) | ❌ |
+| GET | `/tours/detail/<int:id>/` | 특정 장소 상세 정보 조회 | ❌ |
+| GET | `/users/find-region/` | 좌표로 지역명 변환 | ❌ |
 
----
 
 ## 💻 API 호출 예시
 
@@ -171,8 +183,7 @@ python manage.py runserver
     "password": "yourpassword123",
     "password2": "yourpassword123"
 }
-```
-```json
+``````json
 // Response (Success 201 Created)
 {
     "email": "test@example.com"
@@ -187,8 +198,7 @@ python manage.py runserver
     "email": "test@example.com",
     "password": "yourpassword123"
 }
-```
-```json
+``````json
 // Response (Success 200 OK)
 {
     "user": {
@@ -203,38 +213,100 @@ python manage.py runserver
 }
 ```
 
-#### 3. 내 정보 조회
+#### 3. Access Token 재발급
+`POST /api/v1/users/token/refresh/`
+```json
+// Request Body
+{
+    "refresh": "<REFRESH_TOKEN>"
+}
+``````json
+// Response (Success 200 OK)
+{
+    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### 4. 카카오 소셜 로그인
+`GET /api/v1/users/kakao/?code=<KAKAO_AUTHORIZATION_CODE>`
+*클라이언트는 카카오로부터 받은 인가 코드를 쿼리 파라미터로 전달합니다.*
+```json
+// Response (Success 200 OK)
+{
+    "user": {
+        "id": 2,
+        "name": "김카카오",
+        "email": "kakao_12345@kakao.com",
+        "is_info_exist": false
+    },
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "is_info_exist": false
+}
+```
+
+#### 5. 로그아웃
+`POST /api/v1/users/logout/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````json
+// Request Body
+{
+    "refresh": "<REFRESH_TOKEN>"
+}
+``````text
+// Response (Success 205 Reset Content)
+// No body content
+```
+
+#### 6. 내 정보 조회
 `GET /api/v1/users/me/`
 ```http
 // Request Headers
 Authorization: Bearer <ACCESS_TOKEN>
-```
-```json
+``````json
 // Response (Success 200 OK)
 {
     "id": 1,
-    "name": "홍길동",
+    "name": "김노플랜",
     "email": "test@example.com",
     "is_info_exist": true
 }
 ```
 
-#### 4. 사용자 추가 정보 등록
-`POST /api/v1/users/me/info/`
+#### 7. 사용자 이름 설정/변경
+`PUT /api/v1/users/set_name/`
 ```http
 // Request Headers
 Authorization: Bearer <ACCESS_TOKEN>
-```
-```json
+``````json
 // Request Body
+{
+    "name": "김노플랜"
+}
+``````json
+// Response (Success 200 OK)
+{
+    "name": "김노플랜"
+}
+```
+
+#### 8. 사용자 추가 정보 등록 / 수정
+*최초 등록은 POST, 전체 수정은 PUT, 부분 수정은 PATCH를 사용합니다.*
+
+`POST (or PUT, PATCH) /api/v1/users/me/info/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````json
+// Request Body (POST or PUT)
 {
     "name": "김여행",
     "age": 28,
     "gender": "M"
-}
-```
-```json
-// Response (Success 201 Created)
+}``````json
+// Response (Success 201 Created or 200 OK)
 {
     "name": "김여행",
     "age": 28,
@@ -242,21 +314,69 @@ Authorization: Bearer <ACCESS_TOKEN>
 }
 ```
 
-#### 5. 새 여행 생성
+#### 9. 비밀번호 변경
+`POST /api/v1/users/password/change/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````json
+// Request Body
+{
+    "old_password": "yourpassword123",
+    "new_password1": "new_password_456",
+    "new_password2": "new_password_456"
+}
+``````json
+// Response (Success 200 OK)
+{
+    "detail": "비밀번호가 성공적으로 변경되었습니다."
+}
+```
+
+#### 10. 회원 탈퇴
+`DELETE /api/v1/users/me/withdraw/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````json
+// Response (Success 200 OK)
+{
+    "detail": "회원탈퇴가 성공적으로 처리되었습니다."
+}
+```
+
+#### 11. 내 여행 목록 조회
+`GET /api/v1/users/trips/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````json
+// Response (Success 200 OK)
+[
+    {
+        "id": 1,
+        "user": "test@example.com",
+        "region": "부산",
+        "created_at": "2024-05-21T10:00:00Z",
+        "transportation": "KTX",
+        "companion": "친구"
+    }
+]
+```
+
+#### 12. 새 여행 생성
 `POST /api/v1/users/trips/`
 ```http
 // Request Headers
 Authorization: Bearer <ACCESS_TOKEN>
-```
-```json
+``````json
 // Request Body
 {
     "region": "부산",
     "transportation": "KTX",
     "companion": "친구"
 }
-```
-```json
+``````json
 // Response (Success 201 Created)
 {
     "id": 1,
@@ -265,16 +385,40 @@ Authorization: Bearer <ACCESS_TOKEN>
     "created_at": "2024-05-21T10:00:00Z",
     "transportation": "KTX",
     "companion": "친구"
-}
+}```
+
+#### 13. 방문한 장소 목록 조회
+`GET /api/v1/users/visited-contents/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````json
+// Response (Success 200 OK)
+[
+    {
+        "id": 1,
+        "user": "test@example.com",
+        "trip": 1,
+        "content_id": 123456,
+        "title": "해운대 해수욕장",
+        "first_image": "http://image.url/haeundae.jpg",
+        "addr1": "부산 해운대구",
+        "mapx": "129.15860000000000000000",
+        "mapy": "35.15870000000000000000",
+        "overview": "대한민국 대표 해수욕장",
+        "created_at": "2024-05-21T10:05:00Z",
+        "hashtags": "#부산여행 #해수욕장 #가족여행",
+        "recommend_reason": "넓은 백사장과 아름다운 바다 풍경이 인상적인 곳입니다."
+    }
+]
 ```
 
-#### 6. 방문한 장소 저장
+#### 14. 방문한 장소 저장
 `POST /api/v1/users/visited-contents/`
 ```http
 // Request Headers
 Authorization: Bearer <ACCESS_TOKEN>
-```
-```json
+``````json
 // Request Body
 {
     "content_id": 123456,
@@ -287,8 +431,7 @@ Authorization: Bearer <ACCESS_TOKEN>
     "hashtags": "#부산여행 #해수욕장 #가족여행",
     "recommend_reason": "넓은 백사장과 아름다운 바다 풍경이 인상적인 곳입니다."
 }
-```
-```json
+``````json
 // Response (Success 201 Created)
 {
     "id": 1,
@@ -299,31 +442,79 @@ Authorization: Bearer <ACCESS_TOKEN>
 }
 ```
 
-#### 7. 로그아웃
-`POST /api/v1/users/logout/`
+#### 15. 내 북마크 목록 조회
+`GET /api/v1/users/bookmarks/`
 ```http
 // Request Headers
 Authorization: Bearer <ACCESS_TOKEN>
+``````json
+// Response (Success 200 OK)
+[
+    {
+        "id": 1,
+        "user": "test@example.com",
+        "content_id": 126535,
+        "title": "창덕궁",
+        "first_image": "http://tong.visitkorea.or.kr/cms/resource/58/2662258_image2_1.jpg",
+        "addr1": "서울특별시 종로구 율곡로 99",
+        "overview": "창덕궁은 1405년 태종 때 건립된 조선의 궁궐이다...",
+        "created_at": "2024-05-21T11:00:00Z",
+        "hashtags": "#창덕궁 #고궁 #유네스코",
+        "recommend_reason": "고즈넉하고 자연과 어우러진 전통미를 느낄 수 있습니다."
+    }
+]
 ```
-```json
+
+#### 16. 북마크 추가
+`POST /api/v1/users/bookmarks/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````json
 // Request Body
 {
-    "refresh": "<REFRESH_TOKEN>"
+    "content_id": 126535,
+    "title": "창덕궁",
+    "first_image": "http://tong.visitkorea.or.kr/cms/resource/58/2662258_image2_1.jpg",
+    "addr1": "서울특별시 종로구 율곡로 99",
+    "overview": "창덕궁은 1405년 태종 때 건립된 조선의 궁궐이다...",
+    "hashtags": "#창덕궁 #고궁 #유네스코",
+    "recommend_reason": "고즈넉하고 자연과 어우러진 전통미를 느낄 수 있습니다."
+}
+``````json
+// Response (Success 201 Created)
+{
+    "id": 1,
+    "user": "test@example.com",
+    "content_id": 126535,
+    // ... other fields ...
 }
 ```
-```text
-// Response (Success 205 Reset Content)
+
+#### 17. 북마크 삭제
+`DELETE /api/v1/users/bookmarks/1/`
+```http
+// Request Headers
+Authorization: Bearer <ACCESS_TOKEN>
+``````text
+// Response (Success 204 No Content)
 // No body content
 ```
 
-### 여행지 추천 (Tours) API
+### 여행 및 장소 추천 (Tours & Utils) API
 
-#### 1. 주변 식당 추천 (AI 기반)
+#### 1. 좌표로 지역명 찾기
+`GET /api/v1/users/find-region/?lat=37.5796&lon=126.9770`
+```json
+// Response (Success 200 OK)
+{
+    "region_1depth_name": "서울",
+    "region_2depth_name": "종로구"
+}
+```
 
-광화문 근처 반경 2km 내에서 '가성비 좋고', '한식'을 테마로 하는 식당을 AI로 추천받습니다.
-
+#### 2. 주변 식당 추천 (AI 기반)
 `GET /api/v1/tours/restaurants/?mapX=126.9816&mapY=37.5684&radius=2000&adjectives=가성비좋은,한식`
-
 ```json
 // Response (Success 200 OK)
 [
@@ -339,12 +530,8 @@ Authorization: Bearer <ACCESS_TOKEN>
 ]
 ```
 
-#### 2. 주변 카페 추천 (AI 기반)
-
-강남역 근처 반경 1.5km 내에서 '조용하고', '디저트가 맛있는' 카페를 AI로 추천받습니다.
-
+#### 3. 주변 카페 추천 (AI 기반)
 `GET /api/v1/tours/cafes/?mapX=127.0276&mapY=37.4979&radius=1500&adjectives=조용한,디저트가맛있는`
-
 ```json
 // Response (Success 200 OK)
 [
@@ -360,12 +547,8 @@ Authorization: Bearer <ACCESS_TOKEN>
 ]
 ```
 
-#### 3. 주변 관광지 추천 (AI 기반)
-
-경복궁 근처 반경 3km 내에서 '고즈넉하고', '전통적인' 분위기의 관광지를 AI로 추천받습니다.
-
+#### 4. 주변 관광지 추천 (AI 기반)
 `GET /api/v1/tours/attractions/?mapX=126.9779&mapY=37.5796&radius=3000&adjectives=고즈넉한,전통적인`
-
 ```json
 // Response (Success 200 OK)
 [
@@ -378,15 +561,10 @@ Authorization: Bearer <ACCESS_TOKEN>
         "recommend_reason": "왕실의 생활 공간이었던 만큼, 경복궁보다 고즈넉하고 자연과 어우러진 전통미를 느낄 수 있습니다.",
         "hashtags": "#창덕궁 #고궁 #유네스코 #고즈넉한 #전통"
     }
-]
-```
+]```
 
-#### 4. 주변 숙소 추천 (거리순, AI 미사용)
-
-해운대 해수욕장 근처 반경 1km 내의 숙소를 **AI 추천 없이** 가까운 거리순으로 조회합니다.
-
+#### 5. 주변 숙소 추천 (거리순, AI 미사용)
 `GET /api/v1/tours/accommodations/?mapX=129.1586&mapY=35.1587&radius=1000`
-
 ```json
 // Response (Success 200 OK)
 [
@@ -411,12 +589,8 @@ Authorization: Bearer <ACCESS_TOKEN>
 ]
 ```
 
-#### 5. 장소 상세 정보 조회
-
-한국관광공사 API의 고유 ID(`contentid`)를 사용하여 '경복궁'의 상세 정보를 조회합니다.
-
+#### 6. 장소 상세 정보 조회
 `GET /api/v1/tours/detail/126081/`
-
 ```json
 // Response (Success 200 OK)
 {
