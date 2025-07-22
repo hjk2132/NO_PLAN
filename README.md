@@ -67,6 +67,7 @@ NO_PLAN은 명확한 역할 분리를 통해 유지보수성과 확장성을 높
 - Python 3.10+
 - MySQL Server
 - Git
+- Microsoft Build Tools v2019 (https://aka.ms/vs/16/release/vs_buildtools.exe)
 
 ### 2. 프로젝트 클론 및 설정
 
