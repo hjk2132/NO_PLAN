@@ -27,7 +27,7 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 SOCIALACCOUNT_PROVIDERS = {
     'kakao': {
         'APP': {
-            'client_id': os.getenv(KAKAO_API_KEY),
+            'client_id': os.getenv('KAKAO_API_KEY'),
             'secret': '',
             'key': ''
         }
@@ -35,7 +35,7 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 allowed_hosts_str = os.getenv('ALLOWED_HOSTS')
 if allowed_hosts_str:
     # .env 파일에서 가져온 문자열을 쉼표로 쪼개고, 각 항목의 공백을 제거하여 리스트로 만듭니다.
