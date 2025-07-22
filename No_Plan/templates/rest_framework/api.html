@@ -1,0 +1,10 @@
+{% extends "rest_framework/api.html" %}
+{% load static %}
+
+{% block head %}
+    {# 중요: 기존 DRF의 head 내용을 그대로 가져옵니다. #}
+    {{ block.super }}
+
+    {# 여기에 우리의 파비콘 링크를 추가합니다. #}
+    <link rel="icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+{% endblock %}
