@@ -1,6 +1,6 @@
 # NO_PLAN - AI 기반 개인 맞춤 여행지 추천 API
 
-![Project Banner](./assets/NO_PLAN_BANNER.png)
+![Project Banner](./Assets/NO_PLAN_BANNER.png)
 
 **NO_PLAN**은 사용자의 실시간 위치와 추상적인 취향(분위기, 테마 등)을 바탕으로 주변 장소를 추천하고, 여행 일정을 관리할 수 있도록 돕는 인공지능 기반 API 서버입니다. "계획 없이 떠나는 여행"을 컨셉으로, 즉흥적인 사용자에게 최적의 장소를 제안합니다.
 
