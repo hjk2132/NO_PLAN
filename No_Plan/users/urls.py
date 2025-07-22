@@ -1,3 +1,5 @@
+# users/urls.py
+
 # 기본 import
 from django.urls import path
 # dj-rest-auth가 제공하는 View
@@ -7,8 +9,9 @@ from rest_framework_simplejwt.views import TokenRefreshView
 # 직접 만든 View
 from .views import (
     RegisterView, LogoutView, UserDetailView, PasswordChangeView
-    , KakaoLogin, SetNameView, UserInfoView, FindRegionView, TripListCreateView,
-    VisitedContentListCreateView,BookmarkListCreateView, BookmarkDetailView
+, KakaoLogin, SetNameView, UserInfoView, FindRegionView, TripListCreateView,
+    VisitedContentListCreateView, BookmarkListCreateView, BookmarkDetailView,
+    UserWithdrawalView
 )
 
 urlpatterns = [
@@ -26,6 +29,9 @@ urlpatterns = [
 
     # 사용자 정보 (user 모델의 정보)
     path('me/', UserDetailView.as_view(), name='user_detail'),
+
+    # 회원탈퇴
+    path('me/withdraw/', UserWithdrawalView.as_view(), name='user-withdrawal'),
 
     # 사용자 추가 정보 (UserInfo 모델의 정보)
     path('me/info/', UserInfoView.as_view(), name='user_info'),

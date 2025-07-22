@@ -1,3 +1,5 @@
+# users/views.py
+
 # 기본 import
 from .models import User, UserInfo, Trip, VisitedContent, Bookmark
 from django.http import JsonResponse
@@ -187,6 +189,30 @@ class LogoutView(generics.GenericAPIView):
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
 
+# ===================================================================
+# 회원 탈퇴
+# ===================================================================
+class UserWithdrawalView(generics.DestroyAPIView):
+    """
+    로그인한 사용자 본인의 계정을 삭제(회원탈퇴)합니다.
+    DELETE 요청 시, 인증된 사용자의 계정이 삭제됩니다.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        # 삭제할 객체를 현재 로그인된 사용자로 지정합니다.
+        return self.request.user
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        # 기본 204 응답 대신, 커스텀 메시지를 포함한 200 응답을 반환합니다.
+        return Response({"detail": "회원탈퇴가 성공적으로 처리되었습니다."}, status=status.HTTP_200_OK)
+
+
+# ===================================================================
+# 사용자 추가 정보 관리
+# ===================================================================
 class UserInfoView(generics.RetrieveUpdateAPIView):
 
     permission_classes = [permissions.IsAuthenticated]
@@ -369,4 +395,3 @@ class BookmarkDetailView(generics.DestroyAPIView):
         다른 사용자의 북마크를 삭제하려는 시도를 원천 차단합니다.
         """
         return Bookmark.objects.filter(user=self.request.user)
-
