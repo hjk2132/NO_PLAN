@@ -1,10 +1,26 @@
 {% extends "rest_framework/api.html" %}
 {% load static %}
 
+{# --- 기존 파비콘 설정 부분 (그대로 유지) --- #}
 {% block head %}
     {# 중요: 기존 DRF의 head 내용을 그대로 가져옵니다. #}
     {{ block.super }}
 
     {# 여기에 우리의 파비콘 링크를 추가합니다. #}
     <link rel="icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+{% endblock %}
+
+
+{# --- 여기에 새로 추가할 부분 --- #}
+
+{# 1. 브라우저 탭에 표시될 타이틀 변경 #}
+{% block title %}
+    No_Plan(BE): {% if name %}{{ name }}{% else %}API{% endif %}
+{% endblock %}
+
+{# 2. 페이지 상단에 표시될 헤더(브랜드) 변경 #}
+{% block branding %}
+    <a class='navbar-brand' rel="nofollow" href='#'>
+        No_Plan(BE): {% if name %}{{ name }}{% endif %}
+    </a>
 {% endblock %}
