@@ -12,7 +12,6 @@ from django.conf import settings
 
 
 class BlogCrawler:
-    # ... (다른 메소드들은 이전과 동일) ...
     _CONTROL = re.compile(r'[\u200b-\u200f\u202a-\u202e]')
     _EMOJI = re.compile("["
                         u"\U0001F600-\U0001F64F" u"\U0001F300-\U0001F5FF" u"\U0001F680-\U0001F6FF"
@@ -73,40 +72,60 @@ class BlogCrawler:
             print(f"Daum API request failed for '{name}': {e}")
             return []
 
-    # *** 핵심 수정: crawl_all 메소드 수정 ***
+    # --- 핵심 수정 ---
+    # 1. 단일 장소의 '검색->크롤링->결합' 로직을 처리하는 비동기 헬퍼 함수를 추가합니다.
+    async def _crawl_and_process_place(self, session: aiohttp.ClientSession, api_key: str,
+                                       place_info: tuple[str, str, str]) -> dict:
+        """단일 장소에 대한 블로그 검색, 크롤링, 텍스트 결합을 수행합니다."""
+        contentid, name, addr = place_info
+
+        # 각 장소의 블로그 URL 검색
+        urls = await self._search_blogs_aio(session, api_key, name)
+
+        # 검색된 URL들 크롤링
+        if not urls:
+            combined_text = self.placeholder
+        else:
+            # 해당 장소의 블로그 5개를 동시에 크롤링합니다.
+            crawl_tasks = [self.get_text(session, url) for url in urls]
+            crawled_texts = await asyncio.gather(*crawl_tasks)
+            truncated_texts = [self.truncate(text) for text in crawled_texts]
+            combined_text = " ".join(truncated_texts)
+
+        # contentid와 함께 결과 딕셔너리를 반환합니다.
+        return {
+            "contentid": contentid,
+            "관광지명": name,
+            "텍스트": combined_text
+        }
+
+    # 2. crawl_all 메소드를 수정하여 위 헬퍼 함수를 병렬로 실행합니다.
     async def crawl_all(self, place_infos_with_id: list[tuple[str, str, str]]) -> pd.DataFrame:
         """
-        (contentid, title, address) 튜플 리스트를 받아, 각 장소에 대한 블로그를
-        크롤링하고 contentid를 포함한 DataFrame을 반환합니다.
+        (contentid, title, address) 튜플 리스트를 받아, 모든 장소에 대한 블로그
+        크롤링을 병렬로 수행하고 contentid를 포함한 DataFrame을 반환합니다.
         """
         daum_api_key = settings.DAUM_API_KEY
-        final_results = []
 
         async with aiohttp.ClientSession() as session:
-            for contentid, name, addr in place_infos_with_id:
-                # 1. 각 장소의 블로그 URL 검색
-                urls = await self._search_blogs_aio(session, daum_api_key, name)
+            # 3. 모든 장소에 대한 작업(Task) 리스트를 생성합니다.
+            #    이 시점에서는 코드가 실행되지 않고, 계획만 세워둡니다.
+            tasks = [
+                self._crawl_and_process_place(session, daum_api_key, place_info)
+                for place_info in place_infos_with_id
+            ]
 
-                # 2. 검색된 URL들 크롤링
-                if not urls:
-                    combined_text = self.placeholder
-                else:
-                    crawl_tasks = [self.get_text(session, url) for url in urls]
-                    crawled_texts = await asyncio.gather(*crawl_tasks)
-                    truncated_texts = [self.truncate(text) for text in crawled_texts]
-                    combined_text = " ".join(truncated_texts)
+            # 4. asyncio.gather를 사용하여 모든 작업을 병렬로 실행하고 결과를 한 번에 받습니다.
+            #    이 부분이 성능 향상의 핵심입니다.
+            final_results = await asyncio.gather(*tasks)
 
-                # 3. contentid와 함께 결과 저장
-                final_results.append({
-                    "contentid": contentid,
-                    "관광지명": name,
-                    "텍스트": combined_text
-                })
+        # 결과가 비어있는 경우를 대비한 방어 코드
+        if not final_results:
+            return pd.DataFrame(columns=["contentid", "관광지명", "텍스트"])
 
         return pd.DataFrame(final_results)
 
 
-# ... (RecommendationEngine 클래스는 이전과 동일하므로 생략) ...
 class RecommendationEngine:
     def __init__(self, embedding_model: str = "text-embedding-3-small", chat_model: str = "gpt-3.5-turbo",
                  top_k: int = 5):
