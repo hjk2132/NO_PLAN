@@ -154,13 +154,13 @@ class RecommendationEngine:
         df_copy["similarity"] = sims
         return df_copy.sort_values(by="similarity", ascending=False).head(self.top_k)
 
-    async def generate_reason_and_hashtags(self, spot_name: str, adjectives_str: str, summary: str) -> tuple[str, str]:
+    async def generate_reason_and_hashtags(self, spot_name: str, adjectives_str: str, blog_text: str) -> tuple[str, str]:
         prompt = f"""
 당신은 장소 추천 도우미입니다. 아래는 블로그에서 발췌한 요약입니다. 여기서 장소의 특징, 음식, 서비스와 직접적으로 관련된 내용만 참고하여,추천 이유를 작성하세요. 주변 이야기나 관련 없는 정보는 절대 포함하지 마세요.
 관광지 이름과 후기가 주어졌을 때, 사용자가 원하는 형용사와 잘 어울리는 추천 이유를 1줄로 작성해줘. **장소의 분위기와 추천하는 이유와 가게의 특징 모두 포함되도록 하고, 문장은 존댓말로 해줘.** 해당 장소를 잘 나타내는 명사와 형용사로 4~5개의 해시태그를 만들어 주세요.
 - 형용사: {adjectives_str}
 - 관광지명: {spot_name}
-- 요약: {summary}
+- 블로그: {blog_text}
 [출력 형식]
 1. 추천 이유: (한 문장)
 2. 해시태그: #(명사/형용사) #(명사/형용사) #(명사/형용사) #(명사/형용사)
@@ -178,30 +178,12 @@ class RecommendationEngine:
             print(f"[오류] {spot_name} 추천 이유 생성 실패: {e}")
             return ("추천 이유 생성 실패", "해시태그 생성 실패")
 
-    @staticmethod
-    def extract_context_around_place(text: str, place_name: str, window: int = 5, max_length: int = 1000) -> str:
-        sentences = re.split(r'(?<=[.?!])\s*', text)
-        has_name = any(place_name in s for s in sentences)
-        if not has_name:
-            s = text.replace("\n", " ").strip()
-            return s[:max_length] + ("..." if len(s) > max_length else "")
-        selected_indices = [i for i, sent in enumerate(sentences) if place_name in sent]
-        content_indices = set()
-        for i in selected_indices:
-            start = max(i - window, 0)
-            end = min(i + window + 1, len(sentences))
-            content_indices.update(range(start, end))
-        selected_sentences = [sentences[i] for i in sorted(list(content_indices))]
-        comb = " ".join(selected_sentences).replace("\n", " ").strip()
-        return comb[:max_length] + ("..." if len(comb) > max_length else "")
-
     async def add_reasons_and_hashtags(self, df: pd.DataFrame, adjectives: list[str]) -> pd.DataFrame:
         df_copy = df.copy()
         adj_str = ", ".join(sorted(adjectives))
         tasks = []
         for _, row in df_copy.iterrows():
-            summary = self.extract_context_around_place(row["텍스트"], row["관광지명"], window=2, max_length=1500)
-            tasks.append(self.generate_reason_and_hashtags(row["관광지명"], adj_str, summary))
+            tasks.append(self.generate_reason_and_hashtags(row["관광지명"], adj_str, row['텍스트']))
 
         # OpenAI API는 Rate Limit이 엄격하므로, 동시 요청을 10개로 제한합니다.
         CONCURRENCY_LIMIT = 10
