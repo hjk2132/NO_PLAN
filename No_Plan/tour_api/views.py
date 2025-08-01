@@ -16,6 +16,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from urllib3 import poolmanager
 import time
 
+import livepopulartimes
+
 from ai.services import BlogCrawler, RecommendationEngine
 
 
@@ -39,6 +41,27 @@ class AsyncAPIView(APIView):
         return self.response
 
 
+async def get_populartimes_async(place_title: str, place_address: str):
+    if not place_address:
+        return None
+
+    try:
+        formatted_query = f"{place_title}, {place_address}"
+        data = await asyncio.to_thread(
+            livepopulartimes.get_populartimes_by_address,
+            formatted_query
+        )
+
+        if data and data.get('popular_times'):
+            return data
+
+        return None
+
+    except Exception as e:
+        print(f"'{place_title}' 혼잡도 조회 중 오류 발생: {e}")
+        return None
+
+
 async def get_ai_recommendations(places: list, adjectives: list) -> list:
     print("\n==============[AI 추천 파이프라인 시작]===============")
     total_start_time = time.time()
@@ -53,15 +76,25 @@ async def get_ai_recommendations(places: list, adjectives: list) -> list:
         query = recomm_engine.adjectives_to_query(adjectives)
         crawl_task = crawler.crawl_all(place_infos_with_id)
         query_emb_task = recomm_engine.get_query_embedding(query)
+        populartimes_tasks = [get_populartimes_async(p['title'], p.get('addr1', '')) for p in places]
 
         # 2. asyncio.gather를 사용해 두 작업을 '동시에' 실행하고 결과를 기다립니다.
         t1 = time.time()
-        crawling_df, query_emb = await asyncio.gather(
+
+        # [CORRECTED] gather의 모든 결과를 하나의 리스트로 받습니다.
+        all_results = await asyncio.gather(
             crawl_task,
-            query_emb_task
+            query_emb_task,
+            *populartimes_tasks
         )
+
+        # [CORRECTED] 결과를 올바르게 분배합니다.
+        crawling_df = all_results[0]
+        query_emb = all_results[1]
+        populartimes_results = all_results[2:]
+
         t2 = time.time()
-        print(f"  [1/4] 블로그 크롤링 및 쿼리 임베딩 동시 완료: {t2 - t1:.2f} 초 ({len(places)}개 장소)")
+        print(f"  [1/4] 블로그 크롤링, 쿼리 임베딩, 혼잡도 조회 동시 완료: {t2 - t1:.2f} 초 ({len(places)}개 장소)")
 
         # 크롤링 결과가 없으면 바로 종료
         if crawling_df.empty or crawling_df['텍스트'].str.strip().eq('').all():
@@ -97,12 +130,19 @@ async def get_ai_recommendations(places: list, adjectives: list) -> list:
 
     crawling_df = crawling_df.replace({np.nan: None})
     original_place_map = {p['contentid']: p for p in places}
+
+    contentid_to_populartimes = {
+        place['contentid']: pop_result
+        for place, pop_result in zip(places, populartimes_results)
+    }
+
     for _, row in crawling_df.iterrows():
         contentid = row['contentid']
         if contentid in original_place_map:
             original_place_map[contentid]['similarity'] = row.get('similarity')
             original_place_map[contentid]['recommend_reason'] = row.get('추천이유')
             original_place_map[contentid]['hashtags'] = row.get('해시태그')
+            original_place_map[contentid]['populartimes'] = contentid_to_populartimes.get(contentid)
 
     sorted_places = sorted(
         original_place_map.values(),
