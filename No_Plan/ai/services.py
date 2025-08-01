@@ -33,7 +33,7 @@ class BlogCrawler:
                         u"\u2300-\u23FF" u"\u2600-\u26FF" u"\u2700-\u27BF" u"\u2B00-\u2BFF" u"\uFE0F"
                         "]+", flags=re.UNICODE)
 
-    def __init__(self, model: str = "text-embedding-3-small", max_tokens: int = 1600,
+    def __init__(self, model: str = "text-embedding-3-small", max_tokens: int = 2500,
                  placeholder: str = "<NO_CONTENT>"):
         self.encoding = tiktoken.encoding_for_model(model)
         self.max_tokens = max_tokens
@@ -71,17 +71,19 @@ class BlogCrawler:
         if not cont: return self.placeholder
         return self.clean(cont.get_text(strip=True))
 
-    async def _search_blogs_aio(self, session: aiohttp.ClientSession, api_key: str, name: str) -> list[str]:
+    async def _search_blogs_aio(self, session: aiohttp.ClientSession, api_key: str, name: str, addr: str) -> list[str]:
         URL = "https://dapi.kakao.com/v2/search/blog"
         headers = {"Authorization": f"KakaoAK {api_key}"}
-        params = {"query": name, "size": 5}
+        addr = ' '.join(addr.split()[:2]) # 주소의 시, 구만 사용
+        params = {"query": f'{name} {addr}', "size": 10}
         try:
             async with session.get(URL, headers=headers, params=params, timeout=5) as resp:
                 if resp.status != 200:
                     print(f"Daum API Error for '{name}': Status {resp.status}, Response: {await resp.text()}")
                     return []
                 data = await resp.json()
-                return [doc['url'] for doc in data.get('documents', [])]
+                urls = [doc['url'] for doc in data.get('documents', [])]
+                return [url for url in urls if 'https://blog.naver.com' in url][:3] # 네이버 블로그만을 추출
         except Exception as e:
             print(f"Daum API request failed for '{name}': {e}")
             return []
@@ -93,7 +95,7 @@ class BlogCrawler:
         CONCURRENCY_LIMIT_PLACES = 30
 
         async def process_place(contentid, name, addr, session):
-            urls = await self._search_blogs_aio(session, daum_api_key, name)
+            urls = await self._search_blogs_aio(session, daum_api_key, name, addr)
             if not urls:
                 combined_text = self.placeholder
             else:
@@ -101,8 +103,12 @@ class BlogCrawler:
                 # 각 장소 내부의 블로그 크롤링은 동시 5개로 제한
                 crawled_texts = await gather_with_concurrency(5, *crawl_tasks)
                 truncated_texts = [self.truncate(text) for text in crawled_texts]
-                combined_text = " ".join(truncated_texts)
-            return {"contentid": contentid, "관광지명": name, "텍스트": combined_text}
+                incorrect_texts = [text if (text == self.placeholder)
+                                           or (re.sub(r'\([^)]*\)', '', name.split()[0]) in text.replace(" ", "")) # 이름에서 지졈명과 괄호 안 내용 삭제, 공백을 삭제한 블로그 텍스트와 비교
+                    else '<INCORRECT_CONTENT>'
+                    for text in truncated_texts]
+                combined_text = " ".join(incorrect_texts)
+            return {"contentid": contentid, "관광지명": name, "텍스트": combined_text, 'urls': urls}
 
         async with aiohttp.ClientSession() as session:
             tasks = [process_place(cid, n, a, session) for cid, n, a in place_infos_with_id]
