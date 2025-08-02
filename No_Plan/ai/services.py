@@ -168,7 +168,7 @@ class RecommendationEngine:
         df_copy["similarity"] = sims
         return df_copy.sort_values(by="similarity", ascending=False).head(self.top_k)
 
-    async def generate_reason_and_hashtags(self, spot_name: str, adjectives: list[str], adjectives_query: str, blog_text: str) -> tuple[str, str]:
+    async def generate_reason_and_hashtags(self, spot_name: str, adjectives: list[str], adjectives_query: str, blog_text: str, place_type: str) -> tuple[str, str]:
         prompt = f"""
 당신의 역할은 "관광지명"과 해당 관광지의 블로그 후기인 "블로그" 텍스트를 활용하여 사용자에게 장소를 추천해주는 것입니다.
 아래 "형용사"는 사용자가 장소에 대해 원하는 분위기이고, "형용사 의미"는 "형용사의 사전적 의미에 대한 정보입니다.
@@ -180,6 +180,7 @@ class RecommendationEngine:
 - 형용사: {adjectives}
 - 형용사 의미: {adjectives_query}
 - 관광지명: {spot_name}
+- 장소유형: {place_type}
 - 블로그: {blog_text}
 [출력 형식]
 1. 추천 이유: (1~2 문장)
@@ -198,12 +199,12 @@ class RecommendationEngine:
             print(f"[오류] {spot_name} 추천 이유 생성 실패: {e}")
             return ("추천 이유 생성 실패", "해시태그 생성 실패")
 
-    async def add_reasons_and_hashtags(self, df: pd.DataFrame, adjectives: list[str]) -> pd.DataFrame:
+    async def add_reasons_and_hashtags(self, df: pd.DataFrame, adjectives: list[str], place_type: str) -> pd.DataFrame:
         df_copy = df.copy()
         adj_query = self.adjectives_to_query(adjectives)
         tasks = []
         for _, row in df_copy.iterrows():
-            tasks.append(self.generate_reason_and_hashtags(row["관광지명"], adjectives, adj_query, row['텍스트']))
+            tasks.append(self.generate_reason_and_hashtags(row["관광지명"], adjectives, adj_query, row['텍스트'], place_type))
 
         # OpenAI API는 Rate Limit이 엄격하므로, 동시 요청을 10개로 제한합니다.
         CONCURRENCY_LIMIT = 10

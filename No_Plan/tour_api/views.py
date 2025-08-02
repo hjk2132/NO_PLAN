@@ -62,7 +62,7 @@ async def get_populartimes_async(place_title: str, place_address: str):
         return None
 
 
-async def get_ai_recommendations(places: list, adjectives: list) -> list:
+async def get_ai_recommendations(places: list, adjectives: list, place_type: str) -> list:
     print("\n==============[AI 추천 파이프라인 시작]===============")
     total_start_time = time.time()
     if not places or not adjectives:
@@ -123,7 +123,7 @@ async def get_ai_recommendations(places: list, adjectives: list) -> list:
         t7 = time.time()
         top_30_df = crawling_df.sort_values(by="similarity", ascending=False).head(30)
         if not top_30_df.empty:
-            result_df = await recomm_engine.add_reasons_and_hashtags(top_30_df, adjectives)
+            result_df = await recomm_engine.add_reasons_and_hashtags(top_30_df, adjectives, place_type)
             crawling_df = crawling_df.merge(result_df[['contentid', '추천이유', '해시태그']], on='contentid', how='left')
         t8 = time.time()
         print(f"  [4/4] 추천 이유/해시태그 생성 완료: {t8 - t7:.2f} 초")
@@ -215,7 +215,7 @@ class RestaurantListView(AsyncAPIView):
             places_for_ai = sorted_restaurants[:MAX_PLACES_FOR_AI]
 
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives)
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '음식점')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_restaurants, status=status.HTTP_200_OK)
@@ -242,7 +242,7 @@ class CafeListView(AsyncAPIView):
             places_for_ai = sorted_cafes[:MAX_PLACES_FOR_AI]
 
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives)
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '카페')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_cafes, status=status.HTTP_200_OK)
@@ -269,7 +269,7 @@ class TouristAttractionListView(AsyncAPIView):
             places_for_ai = sorted_attractions[:MAX_PLACES_FOR_AI]
 
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives)
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '관광지')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_attractions, status=status.HTTP_200_OK)
@@ -296,7 +296,7 @@ class AccommodationListView(AsyncAPIView):
             places_for_ai = sorted_accommodations[:MAX_PLACES_FOR_AI]
 
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives)
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '숙소')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_accommodations, status=status.HTTP_200_OK)
