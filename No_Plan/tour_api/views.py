@@ -94,8 +94,11 @@ async def get_ai_recommendations(places: list, adjectives: list, place_type: str
         populartimes_results = all_results[2:]
 
         t2 = time.time()
-        print(f"  [1/4] 블로그 크롤링, 쿼리 임베딩, 혼잡도 조회 동시 완료: {t2 - t1:.2f} 초 ({len(places)}개 장소)")
-
+        print(f"  [1/4] 블로그 크롤링, 쿼리 임베딩, 혼잡도 조회 동시 완료: {t2 - t1:.2f} 초 ({len(places)}개 중 {len(crawling_df)}개 장소)")
+        
+        # 블로그 정보가 있는 장소만 남김
+        valid_ids = set(crawling_df['contentid'])
+        places = [p for p in places if p['contentid'] in valid_ids]
         # 크롤링 결과가 없으면 바로 종료
         if crawling_df.empty or crawling_df['텍스트'].str.strip().eq('').all():
             return places

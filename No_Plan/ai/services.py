@@ -88,7 +88,7 @@ class BlogCrawler:
             print(f"Daum API request failed for '{name}': {e}")
             return []
 
-    async def crawl_all(self, place_infos_with_id: list[tuple[str, str, str]]) -> pd.DataFrame:
+    async def crawl_all(self, place_infos_with_id: list[tuple[str, str, str]], print_text = False) -> pd.DataFrame:
         daum_api_key = settings.DAUM_API_KEY
 
         # 각 장소에 대한 전체 처리 프로세스를 동시 30개로 제한
@@ -107,12 +107,25 @@ class BlogCrawler:
                                            or (re.sub(r'\([^)]*\)', '', name.split()[0]) in text.replace(" ", "")) # 이름에서 지졈명과 괄호 안 내용 삭제, 공백을 삭제한 블로그 텍스트와 비교
                     else '<INCORRECT_CONTENT>'
                     for text in truncated_texts]
-                combined_text = " ".join(incorrect_texts)
+                
+                # 블로그 결과 디버깅용 print_text
+                if print_text:
+                    combined_text = " ".join(incorrect_texts)
+                    return {"contentid": contentid, "관광지명": name, "텍스트": combined_text, 'urls': urls}
+                
+                # placeholder 제거 
+                clean_text = [t for t in incorrect_texts if t not in ("<INCORRECT_CONTENT>", self.placeholder)]
+                combined_text = " ".join(clean_text)
+                # 결과가 없거나 불일치한 블로그만 있는 경우 None반환
+                if not combined_text.strip():
+                    return None
+                    
             return {"contentid": contentid, "관광지명": name, "텍스트": combined_text, 'urls': urls}
 
         async with aiohttp.ClientSession() as session:
             tasks = [process_place(cid, n, a, session) for cid, n, a in place_infos_with_id]
-            final_results = await gather_with_concurrency(CONCURRENCY_LIMIT_PLACES, *tasks)
+            raw_results = await gather_with_concurrency(CONCURRENCY_LIMIT_PLACES, *tasks)
+            final_results = [r for r in raw_results if r is not None] # 크롤링 결과가 없는 장소 제거
 
         return pd.DataFrame(final_results)
 
