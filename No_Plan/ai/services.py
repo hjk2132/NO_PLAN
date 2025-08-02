@@ -143,7 +143,21 @@ class RecommendationEngine:
 
     @staticmethod
     def adjectives_to_query(adjectives: list[str]) -> str:
-        return "이런 분위기의 장소: " + ", ".join(adjectives)
+        adj_mean_mapping_dict = {'아늑한':'포근하게 감싸 안기듯 편안하고 조용한 느낌이 있다.', 
+                                 '잔잔한':'분위기가 고요하고 평화롭다. 태도 따위가 차분하고 평온하다.', 
+                                 '낭만적인':'현실적이지 않고 신비적이며 공상적인 것. 또는 감동적이며 달콤한 분위기가 있다.', 
+                                 '여유로운':'느긋하고 차분하게 생각하거나 행동하는 마음의 상태. 또는 대범하고 너그럽게 일을 처리하는 마음의 상태이다.', 
+                                 '편안한':'편하고 걱정 없이 좋다.', 
+                                 '활기찬':'힘이 넘치고 생기가 가득하다.', 
+                                 '세련된':'모습 따위가 말쑥하고 품위가 있다.', 
+                                 '모던한':'세련되고 현대적이다.', 
+                                 '힙한':'고유한 개성과 감각을 가지고 있으면서도 최신 유행에 밝고 신선하다.', 
+                                 '빈티지한':'오래된 듯 낡고 닳아 세월의 흔적이 느껴지는 데가 있다.', 
+                                 '고급스러운':'물건이나 시설 따위의 품질이 뛰어나고 값이 비싼 듯하다.', 
+                                 '전통적인':'예로부터 이어져 내려오는 듯하다.', 
+                                 '자유로운':'구속이나 속박 따위가 없이 제 마음대로 할 수 있다.'}
+        # return "이런 분위기의 장소: " + ", ".join(adjectives)
+        return " ".join(adj_mean_mapping_dict[adj] for adj in adjectives)
 
     def recommend_spots(self, df: pd.DataFrame, query_emb: list[float]) -> pd.DataFrame:
         df_embed = df.dropna(subset=['embedding'])
@@ -154,15 +168,23 @@ class RecommendationEngine:
         df_copy["similarity"] = sims
         return df_copy.sort_values(by="similarity", ascending=False).head(self.top_k)
 
-    async def generate_reason_and_hashtags(self, spot_name: str, adjectives_str: str, blog_text: str) -> tuple[str, str]:
+    async def generate_reason_and_hashtags(self, spot_name: str, adjectives: list[str], adjectives_query: str, blog_text: str) -> tuple[str, str]:
+        
         prompt = f"""
-당신은 장소 추천 도우미입니다. 아래는 블로그에서 발췌한 요약입니다. 여기서 장소의 특징, 음식, 서비스와 직접적으로 관련된 내용만 참고하여,추천 이유를 작성하세요. 주변 이야기나 관련 없는 정보는 절대 포함하지 마세요.
-관광지 이름과 후기가 주어졌을 때, 사용자가 원하는 형용사와 잘 어울리는 추천 이유를 1줄로 작성해줘. **장소의 분위기와 추천하는 이유와 가게의 특징 모두 포함되도록 하고, 문장은 존댓말로 해줘.** 해당 장소를 잘 나타내는 명사와 형용사로 4~5개의 해시태그를 만들어 주세요.
-- 형용사: {adjectives_str}
+당신의 역할은 "관광지명"과 해당 관광지의 블로그 후기인 "블로그" 텍스트를 활용하여 사용자에게 장소를 추천해주는 것입니다.
+장소유형 : 카페 음식점 관광지 숙소
+동반자 : 유형
+지시사항을 기반으로 해요체를 사용하여 해당 장소의 추천이유를 1~2 문장으로 작성하고, 해당 장소를 잘 나타내는 명사와 형용사로 4~5개의 해시태그를 만드세요.
+아래 "형용사"는 사용자가 장소에 대해 원하는 분위기이고, "형용사 의미"는 "형용사의 사전적 의미에 대한 정보입니다.
+(1) '블로그' 텍스트에서 장소의 특징, 음식, 서비스와 직접적으로 관련된 내용을 추출하여 요약하세요. 이때, 주변 이야기나 "관광지명"과 관련 없는 정보는 절대 포함하지 마세요.
+(2) (1)에서 요약한 정보로 사용자가 제시한 "형용사"가 잘 어울리는 이유를 작성하세요. 이때, 제시된 형용사를 직접적으로 언급하는 건 지양하고, '관광지명'으로 시작하세요. 
+추천이유 예시: "다동 황소 막창은 쫄깃하고 고소한 막창과 깔끔한 반찬이 어우러져 맛과 품질 모두 뛰어난 곳이에요."
+- 형용사: {adjectives}
+- 형용사 의미: {adjectives_query}
 - 관광지명: {spot_name}
 - 블로그: {blog_text}
 [출력 형식]
-1. 추천 이유: (한 문장)
+1. 추천 이유: (1~2 문장)
 2. 해시태그: #(명사/형용사) #(명사/형용사) #(명사/형용사) #(명사/형용사)
 """
         try:
@@ -180,10 +202,10 @@ class RecommendationEngine:
 
     async def add_reasons_and_hashtags(self, df: pd.DataFrame, adjectives: list[str]) -> pd.DataFrame:
         df_copy = df.copy()
-        adj_str = ", ".join(sorted(adjectives))
+        adj_query = self.adjectives_to_query(adjectives)
         tasks = []
         for _, row in df_copy.iterrows():
-            tasks.append(self.generate_reason_and_hashtags(row["관광지명"], adj_str, row['텍스트']))
+            tasks.append(self.generate_reason_and_hashtags(row["관광지명"], adjectives, adj_query, row['텍스트']))
 
         # OpenAI API는 Rate Limit이 엄격하므로, 동시 요청을 10개로 제한합니다.
         CONCURRENCY_LIMIT = 10
