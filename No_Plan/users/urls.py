@@ -11,7 +11,7 @@ from .views import (
     RegisterView, LogoutView, UserDetailView, PasswordChangeView
 , KakaoLogin, SetNameView, UserInfoView, FindRegionView, TripListCreateView,
     VisitedContentListCreateView, BookmarkListCreateView, BookmarkDetailView,
-    UserWithdrawalView
+    UserWithdrawalView, KakaoConnectView,
 )
 
 urlpatterns = [
@@ -44,6 +44,9 @@ urlpatterns = [
 
     # 카카오 소셜 로그인
     path('kakao/', KakaoLogin.as_view(), name='kakao_login'),
+
+    # 카카오 계정 연동을 위한 새로운 경로
+    path('kakao/connect/', KakaoConnectView.as_view(), name='kakao_connect'),
 
     # 카카오 지도 위경도 -> 지역
     path('find-region/', FindRegionView, name='find_region'),

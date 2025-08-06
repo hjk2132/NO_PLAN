@@ -34,6 +34,10 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+# 카카오 소셜 로그인 웹뷰 지원용 설정
+SOCIALACCOUNT_LOGIN_ON_GET = True
+
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 allowed_hosts_str = os.getenv('ALLOWED_HOSTS')
@@ -205,12 +209,10 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
-
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
 
-# 배포 시 manage.py collectstatic을 실행할 때 정적 파일이 모이는 경로
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
