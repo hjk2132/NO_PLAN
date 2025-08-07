@@ -87,18 +87,33 @@ class Trip(models.Model):
         verbose_name='생성 시각'
     )
 
-    # --- 추가된 필드 ---
+    # 대중교통
     transportation = models.CharField(
         max_length=100,
         blank=True, null=True,  # 기존 데이터가 있으므로 NULL 허용
         verbose_name='이동수단'
     )
+
+    # 동행자
     companion = models.CharField(
         max_length=100,
         blank=True, null=True,  # 기존 데이터가 있으므로 NULL 허용
         verbose_name='동행자'
     )
-    # --- 추가 끝 ---
+
+    # 형용사
+    adjectives = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='선택한 형용사'
+    )
+
+    # AI 요약
+    summary = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='AI 여행 요약'
+    )
 
     def __str__(self):
         # Admin 페이지 등에서 객체를 쉽게 식별할 수 있도록 문자열 표현을 정의합니다.
@@ -155,16 +170,17 @@ class VisitedContent(models.Model):
     # 저장 시각 (row 생성 시각)
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='저장 시각')
 
-    # --- 추가된 필드 ---
+    # 해시태그
     hashtags = models.TextField(
         blank=True, null=True,
         verbose_name='해시태그'
     )
+
+    # 추천이유
     recommend_reason = models.TextField(
         blank=True, null=True,
         verbose_name='추천이유'
     )
-    # --- 추가 끝 ---
 
     def __str__(self):
         return f"[{self.trip.region}] {self.title} (사용자: {self.user.username})"
@@ -208,16 +224,17 @@ class Bookmark(models.Model):
     # 북마크 생성 시각 (자동으로 현재 시각 저장)
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='북마크 생성 시각')
 
-    # --- 추가된 필드 ---
+    # 해시태그
     hashtags = models.TextField(
         blank=True, null=True,
         verbose_name='해시태그'
     )
+
+    # 추천이유
     recommend_reason = models.TextField(
         blank=True, null=True,
         verbose_name='추천이유'
     )
-    # --- 추가 끝 ---
 
     def __str__(self):
         # Admin 페이지 등에서 객체를 쉽게 식별할 수 있도록 문자열 표현을 정의합니다.
