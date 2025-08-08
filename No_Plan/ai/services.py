@@ -220,3 +220,34 @@ class RecommendationEngine:
 
         df_copy["추천이유"], df_copy["해시태그"] = zip(*results)
         return df_copy
+
+
+    # ===================================================================
+    # 여행 요약 생성 (08.08 추가 내용)
+    # ===================================================================
+    async def generate_trip_summary(self, trip_context: str) -> str:
+        """
+        주어진 여행 정보 콘텍스트를 바탕으로 AI 여행 요약을 생성합니다.
+        """
+        prompt = f"""
+당신은 여행의 추억을 아름답게 정리해주는 여행 작가입니다. 아래는 사용자의 여행 기록 데이터입니다. 이 데이터를 바탕으로 전체 여행을 아우르는 감성적이고 구체적인 여행 요약을 3~4개의 문장으로 작성해주세요.
+
+- 여행의 전체적인 분위기(사용자가 원했던 형용사)와 방문했던 장소 1~2곳의 특징을 자연스럽게 연결해주세요.
+- 친구에게 여행 후기를 말해주는 것처럼 친근하고 부드러운 존댓말을 사용해주세요.
+- 최종 결과물은 다른 설명 없이 오직 '요약 문장'만 있어야 합니다.
+
+[여행 기록 데이터]
+{trip_context}
+"""
+        try:
+            resp = await self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.8,
+                max_tokens=500
+            )
+            summary = resp.choices[0].message.content.strip()
+            return summary
+        except Exception as e:
+            print(f"[오류] 여행 요약 생성 실패: {e}")
+            return "여행 요약을 생성하는 데 실패했습니다."

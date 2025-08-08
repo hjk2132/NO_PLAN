@@ -7,7 +7,7 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 import ssl
 import json
 import pandas as pd
@@ -16,10 +16,15 @@ from sklearn.metrics.pairwise import cosine_similarity
 from urllib3 import poolmanager
 import time
 
+from asgiref.sync import sync_to_async # sync_to_async 임포트
+from django.shortcuts import get_object_or_404 # get_object_or_404 임포트
+from django.core.exceptions import ObjectDoesNotExist # 에러 처리를 위한 임포트
+
 import livepopulartimes
 
+# ai 서비스와 users 모델 임포트
 from ai.services import BlogCrawler, RecommendationEngine
-
+from users.models import Trip, VisitedContent
 
 class AsyncAPIView(APIView):
     async def dispatch(self, request, *args, **kwargs):
@@ -342,3 +347,85 @@ class TourDetailView(APIView):
             return Response(detail_data, status=status.HTTP_200_OK)
         else:
             return Response({"error": "해당 contentId에 대한 정보를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+        
+
+class TripSummaryView(AsyncAPIView):
+    """
+    특정 여행(Trip)에 대한 AI 요약을 생성하는 비동기 API.
+    POST 요청 시 해당 trip_id에 대한 요약을 생성하고 DB에 저장합니다.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _prepare_trip_context(self, trip: Trip, visited_places: list[VisitedContent]) -> str:
+        """
+        AI 프롬프트에 사용될 여행 정보를 하나의 문자열로 동기적으로 조합합니다.
+        """
+        context_parts = [
+            f"- 여행 지역: {trip.region}",
+            f"- 동행자: {trip.companion or '정보 없음'}",
+            f"- 이동수단: {trip.transportation or '정보 없음'}",
+            f"- 원했던 여행 분위기(형용사): {trip.adjectives or '정보 없음'}"
+        ]
+
+        visited_descriptions = ["\n[방문한 장소 목록]"]
+        if not visited_places:
+            visited_descriptions.append("방문한 장소가 없습니다.")
+        else:
+            for i, place in enumerate(visited_places):
+                description = (
+                    f"{i+1}. {place.title}: "
+                    f"이곳에 대해 사용자가 남긴 추천 이유는 '{place.recommend_reason or '특이사항 없음'}' 이며, "
+                    f"관련 해시태그는 '{place.hashtags or '없음'}' 입니다."
+                )
+                visited_descriptions.append(description)
+
+        return "\n".join(context_parts + visited_descriptions)
+
+    @sync_to_async
+    def _get_trip_and_places(self, trip_id: int, user):
+        """
+        동기적인 DB 조회를 비동기 컨텍스트에서 실행하기 위한 헬퍼 메소드.
+        """
+        trip = get_object_or_404(Trip, id=trip_id, user=user)
+        visited_places = list(VisitedContent.objects.filter(trip=trip).order_by('created_at'))
+        return trip, visited_places
+    
+    @sync_to_async
+    def _save_trip_summary(self, trip: Trip, summary: str):
+        """
+        동기적인 DB 저장을 비동기 컨텍스트에서 실행하기 위한 헬퍼 메소드.
+        """
+        trip.summary = summary
+        trip.save(update_fields=['summary'])
+
+    async def post(self, request, trip_id: int):
+        # 1. DB에서 여행 정보와 방문지 목록을 비동기적으로 조회합니다.
+        try:
+            trip, visited_places = await self._get_trip_and_places(trip_id, request.user)
+        except ObjectDoesNotExist:
+             return Response({"error": "해당 여행을 찾을 수 없거나 접근 권한이 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not visited_places:
+            return Response({"error": "요약을 생성할 방문 기록이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. 조회된 정보로 AI에게 전달할 콘텍스트를 생성합니다.
+        trip_context = self._prepare_trip_context(trip, visited_places)
+        print("--- AI에게 전달될 콘텍스트 ---")
+        print(trip_context)
+        print("--------------------------")
+
+        # 3. AI 엔진을 통해 요약을 비동기적으로 생성합니다.
+        try:
+            async with RecommendationEngine() as recomm_engine:
+                summary_text = await recomm_engine.generate_trip_summary(trip_context)
+        except Exception as e:
+            return Response({"error": f"AI 요약 생성 중 서버 오류 발생: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 4. 생성된 요약을 DB에 비동기적으로 저장합니다.
+        await self._save_trip_summary(trip, summary_text)
+
+        # 5. 생성된 요약을 클라이언트에 반환합니다.
+        return Response({
+            "trip_id": trip.id,
+            "summary": summary_text
+        }, status=status.HTTP_200_OK)

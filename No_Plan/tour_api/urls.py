@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import RestaurantListView, CafeListView, TouristAttractionListView, AccommodationListView, TourDetailView
+from .views import RestaurantListView, CafeListView, TouristAttractionListView, AccommodationListView, TourDetailView, TripSummaryView
 
 urlpatterns = [
     # 식당 조회 API
@@ -16,4 +16,7 @@ urlpatterns = [
 
     # contentId 기반 장소 조회 API
     path('detail/<int:content_id>/', TourDetailView.as_view(), name='tour-detail'),
+
+    # 여행 요약 생성 API
+    path('trips/<int:trip_id>/summarize/', TripSummaryView.as_view(), name='trip-summary'),
 ]
