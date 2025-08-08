@@ -85,16 +85,27 @@ AUTHENTICATION_BACKENDS = (
 )
 
 # ===================================================================
-# dj-rest-auth 및 allauth 관련 설정
+# dj-rest-auth 및 allauth 관련 설정 (최종 수정본)
 # ===================================================================
 
+# [추가] allauth가 인증의 기준으로 사용할 방식을 '이메일'로 명확히 지정합니다.
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+
+# [추가] 회원가입 시 username을 요구하지 않도록 설정합니다.
+ACCOUNT_USERNAME_REQUIRED = False
+
+# [추가] 이메일 주소를 필수로 요구하도록 설정합니다.
+ACCOUNT_EMAIL_REQUIRED = True
+
+# [추가] 이메일 주소는 고유해야 함을 명시합니다.
+# 이 설정을 통해 allauth는 소셜 로그인 시 이메일로 기존 사용자를 찾아 계정을 "연결"합니다.
+ACCOUNT_UNIQUE_EMAIL = True
+
 # 1. 로그인 시 사용할 주된 식별자 방식
-# 'email' 또는 'username' 중 선택할 수 있으며, 여러 개를 넣을 수도 있음
-ACCOUNT_LOGIN_METHODS = ['email']
+# ACCOUNT_LOGIN_METHODS = ['email'] # [수정] 위 ACCOUNT_AUTHENTICATION_METHOD 설정으로 대체되므로 주석 처리
 
 # 2. 회원가입 시 받을 필드 지정 (신식)
-# 'email'만 포함하여 이메일 필수를 강제하고, username은 폼에서 받지 않음
-ACCOUNT_SIGNUP_FIELDS = ['email']
+# ACCOUNT_SIGNUP_FIELDS = ['email'] # [수정] 위 allauth 설정들로 대체되므로 주석 처리
 
 # 3. 이메일 인증 절차는 사용하지 않음
 ACCOUNT_EMAIL_VERIFICATION = 'none'
