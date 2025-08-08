@@ -325,3 +325,4 @@ class BookmarkDetailView(generics.DestroyAPIView):
 
     def get_queryset(self):
         return Bookmark.objects.filter(user=self.request.user)
+

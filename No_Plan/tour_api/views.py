@@ -26,7 +26,7 @@ from users.models import Trip, VisitedContent
 
 
 # ===================================================================
-# 08.08 AsyncAPIView의 dispatch 메소드 수정
+# [수정된 부분] AsyncAPIView의 dispatch 메소드 수정
 # ===================================================================
 class AsyncAPIView(APIView):
     async def dispatch(self, request, *args, **kwargs):
@@ -329,9 +329,6 @@ class TourDetailView(APIView):
         else:
             return Response({"error": "해당 contentId에 대한 정보를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
 
-'''
-08.08 TripSummaryView API 추가
-'''
 
 class TripSummaryView(AsyncAPIView):
     permission_classes = [IsAuthenticated]

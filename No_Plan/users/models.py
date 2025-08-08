@@ -180,7 +180,7 @@ class VisitedContent(models.Model):
     recommend_reason = models.TextField(
         blank=True, null=True,
         verbose_name='추천이유'
-    )
+    ) 
 
     def __str__(self):
         return f"[{self.trip.region}] {self.title} (사용자: {self.user.username})"
@@ -234,7 +234,7 @@ class Bookmark(models.Model):
     recommend_reason = models.TextField(
         blank=True, null=True,
         verbose_name='추천이유'
-    )
+    ) 
 
     def __str__(self):
         # Admin 페이지 등에서 객체를 쉽게 식별할 수 있도록 문자열 표현을 정의합니다.
