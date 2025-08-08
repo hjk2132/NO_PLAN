@@ -10,6 +10,10 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
+from allauth.socialaccount.providers.kakao.views import KakaoOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from dj_rest_auth.registration.views import SocialLoginView
+from rest_framework.exceptions import ValidationError # ValidationError 임포트
 import requests
 import concurrent.futures
 
@@ -38,15 +42,14 @@ class KakaoLogin(SocialLoginView):
     """
     adapter_class = KakaoOAuth2Adapter
     client_class = OAuth2Client
+    # 실제 운영 환경의 Redirect URI를 사용해야 합니다.
     callback_url = "https://www.no-plan.cloud/api/v1/users/kakao/"
 
     def get(self, request, *args, **kwargs):
-        # 1. 웹뷰를 통해 GET 요청으로 들어온 'code'를 추출합니다.
         code = request.query_params.get('code')
         if not code:
             return Response({"error": "URL 쿼리 파라미터에 'code'가 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. 'code'를 'access_token'으로 교환합니다.
         try:
             token_url = "https://kauth.kakao.com/oauth/token"
             client_id = settings.SOCIALACCOUNT_PROVIDERS['kakao']['APP']['client_id']
@@ -60,46 +63,64 @@ class KakaoLogin(SocialLoginView):
             token_response.raise_for_status()
             token_json = token_response.json()
             access_token = token_json.get("access_token")
+
             if not access_token:
-                return Response({"error": "카카오로부터 액세스 토큰을 받아오지 못했습니다."}, status=status.HTTP_400_BAD_REQUEST)
+                # 카카오 응답에 access_token이 없는 경우
+                error_description = token_json.get("error_description", "알 수 없는 오류")
+                return Response(
+                    {"error": "카카오로부터 액세스 토큰을 받아오지 못했습니다.", "details": error_description},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
         except requests.exceptions.RequestException as e:
             return Response({"error": f"카카오 서버 통신 오류: {e}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
-        # 3. access_token을 딕셔너리에 담아, 공통 처리 메소드로 전달합니다.
         auth_data = {'access_token': access_token}
         return self.process_login(request, auth_data)
 
-
     def post(self, request, *args, **kwargs):
-        # 1. 네이티브 앱을 통해 POST 요청으로 들어온 'access_token'을 사용합니다.
         auth_data = request.data
         if not auth_data.get('access_token'):
             return Response({"error": "POST 본문에 'access_token'이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # 2. 데이터를 그대로 공통 처리 메소드로 전달합니다.
         return self.process_login(request, auth_data)
 
     def process_login(self, request, auth_data):
-        # [HELPER METHOD] GET과 POST의 로그인 후반 작업을 공통으로 처리합니다.
+        # [수정된 헬퍼 메소드]
         try:
+            # dj-rest-auth의 시리얼라이저를 통해 SocialLogin 객체 생성 시도
             self.serializer = self.get_serializer(data=auth_data)
             self.serializer.is_valid(raise_exception=True)
+            
+            # validated_data에서 sociallogin 객체를 가져옴
             sociallogin = self.serializer.validated_data.get('sociallogin')
+            
+            # 만약의 경우를 대비한 방어 코드 (adapter 수정으로 해결되지만, 유지하는 것이 안전)
             if not sociallogin:
-                return Response({"error": "SocialLogin 정보를 찾을 수 없습니다."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response(
+                    {"error": "SocialLogin 객체를 생성하지 못했습니다. 서버 로그를 확인해주세요."}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
+        except ValidationError as e:
+            # dj-rest-auth 또는 allauth에서 발생한 유효성 검사 오류
+            return Response({'error': '소셜 로그인 처리 중 오류가 발생했습니다.', 'details': e.detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # 그 외 예상치 못한 모든 오류
+            return Response({'error': f'알 수 없는 서버 오류가 발생했습니다: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # allauth 로그인 및 JWT 생성/반환
+        # allauth를 통해 실제 Django 세션에 로그인 처리
         sociallogin.login(request)
+        
+        # JWT 토큰 생성 및 반환
         user = sociallogin.user
         refresh = RefreshToken.for_user(user)
         token_data = {
             'access_token': str(refresh.access_token),
             'refresh_token': str(refresh),
-            'user': user
+            'user': user  # user 객체를 넘겨주어야 CustomJWTSerializer가 인식
         }
+        
+        # 커스텀 JWT 시리얼라이저로 최종 응답 생성
         jwt_serializer = CustomJWTSerializer(instance=token_data, context={'request': request})
         return Response(jwt_serializer.data, status=status.HTTP_200_OK)
 
