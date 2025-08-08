@@ -28,6 +28,7 @@ SOCIALACCOUNT_PROVIDERS = {
     'kakao': {
         'APP': {
             'client_id': os.getenv('KAKAO_API_KEY'),
+            # [수정된 부분] .env 파일에서 Client Secret 값을 읽어오도록 변경
             'secret': os.getenv('KAKAO_CLIENT_SECRET'),
             'key': ''
         }
@@ -56,6 +57,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # [최종 수정된 부분] allauth의 필수 앱인 sites 프레임워크를 추가합니다.
+    'django.contrib.sites',
 
     #3rd Party Apps
     'rest_framework',
@@ -88,35 +91,33 @@ AUTHENTICATION_BACKENDS = (
 # dj-rest-auth 및 allauth 관련 설정 (최종 수정본)
 # ===================================================================
 
-# [추가] allauth가 인증의 기준으로 사용할 방식을 '이메일'로 명확히 지정합니다.
+# allauth가 인증의 기준으로 사용할 방식을 '이메일'로 명확히 지정합니다.
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
 
-# [추가] 회원가입 시 username을 요구하지 않도록 설정합니다.
+# 회원가입 시 username을 요구하지 않도록 설정합니다.
 ACCOUNT_USERNAME_REQUIRED = False
 
-# [추가] 이메일 주소를 필수로 요구하도록 설정합니다.
+# 이메일 주소를 필수로 요구하도록 설정합니다.
 ACCOUNT_EMAIL_REQUIRED = True
 
-# [추가] 이메일 주소는 고유해야 함을 명시합니다.
-# 이 설정을 통해 allauth는 소셜 로그인 시 이메일로 기존 사용자를 찾아 계정을 "연결"합니다.
+# 이메일 주소는 고유해야 함을 명시합니다.
 ACCOUNT_UNIQUE_EMAIL = True
 
-# 1. 로그인 시 사용할 주된 식별자 방식
-# ACCOUNT_LOGIN_METHODS = ['email'] # [수정] 위 ACCOUNT_AUTHENTICATION_METHOD 설정으로 대체되므로 주석 처리
-
-# 2. 회원가입 시 받을 필드 지정 (신식)
-# ACCOUNT_SIGNUP_FIELDS = ['email'] # [수정] 위 allauth 설정들로 대체되므로 주석 처리
-
-# 3. 이메일 인증 절차는 사용하지 않음
+# 이메일 인증 절차는 사용하지 않음
 ACCOUNT_EMAIL_VERIFICATION = 'none'
 
-# 4. 소셜 로그인 시 사용할 커스텀 어댑터 경로 지정
+# 소셜 로그인 시 사용할 커스텀 어댑터 경로 지정
 SOCIALACCOUNT_ADAPTER = 'users.adapter.CustomSocialAccountAdapter'
 
-# 5. dj-rest-auth가 JWT를 사용하도록 설정
+# [최종 수정된 부분]
+# 소셜 계정으로 로그인 시, 추가적인 회원가입 절차를 생략하고 즉시 가입/로그인 처리합니다.
+# 'socialaccount_signup' URL이 필요 없게 되어 NoReverseMatch 오류를 해결합니다.
+SOCIALACCOUNT_AUTO_SIGNUP = True
+
+# dj-rest-auth가 JWT를 사용하도록 설정
 REST_USE_JWT = True
 
-# 6. dj-rest-auth의 세부 설정
+# dj-rest-auth의 세부 설정
 REST_AUTH = {
     'REGISTER_SERIALIZER': 'users.serializers.RegisterSerializer',
     'USER_DETAILS_SERIALIZER': 'users.serializers.UserSerializer',
@@ -151,13 +152,11 @@ MIDDLEWARE = [
 ]
 
 # ===================================================================
-# 템플릿 설정 (수정된 부분)
+# 템플릿 설정
 # ===================================================================
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        # DIRS에 프로젝트 최상위의 templates 폴더 경로를 추가합니다.
-        # 이렇게 해야 우리가 만든 templates/rest_framework/api.html을 찾을 수 있습니다.
         'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
