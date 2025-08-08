@@ -144,7 +144,7 @@ class TripSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Trip
-        fields = ('id', 'user', 'region', 'created_at', 'transportation', 'companion')
+        fields = ('id', 'user', 'region', 'created_at', 'transportation', 'companion', 'adjectives', 'summary')
         read_only_fields = ('id', 'user', 'created_at')
 
 

@@ -37,9 +37,8 @@ SOCIALACCOUNT_PROVIDERS = {
 # 카카오 소셜 로그인 웹뷰 지원용 설정
 SOCIALACCOUNT_LOGIN_ON_GET = True
 
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 allowed_hosts_str = os.getenv('ALLOWED_HOSTS')
 if allowed_hosts_str:
     # .env 파일에서 가져온 문자열을 쉼표로 쪼개고, 각 항목의 공백을 제거하여 리스트로 만듭니다.

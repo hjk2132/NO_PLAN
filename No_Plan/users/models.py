@@ -113,7 +113,7 @@ class Trip(models.Model):
         blank=True,
         null=True,
         verbose_name='AI 여행 요약'
-    )
+    ) 
 
     def __str__(self):
         # Admin 페이지 등에서 객체를 쉽게 식별할 수 있도록 문자열 표현을 정의합니다.

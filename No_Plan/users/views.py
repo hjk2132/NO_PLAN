@@ -25,7 +25,7 @@ from .utils import get_region_from_coords
 from .serializers import (
     RegisterSerializer, UserSerializer, PasswordChangeSerializer
     , SetNameSerializer, UserInfoSerializer, TripSerializer, VisitedContentSerializer
-    , BookmarkSerializer, CustomJWTSerializer  # CustomJWTSerializer를 직접 사용하기 위해 import
+    , BookmarkSerializer, CustomJWTSerializer
 )
 
 
@@ -34,88 +34,74 @@ from .serializers import (
 # ===================================================================
 class KakaoLogin(SocialLoginView):
     """
-    웹 브라우저/웹뷰와 React Native 앱 모두를 위한 통합 카카오 로그인 엔드포인트.
-    - 웹: 카카오 로그인 후 리디렉션되면 GET 요청으로 code를 받아 처리.
-    - 앱: 카카오 SDK로 얻은 access_token을 POST 요청으로 받아 처리.
-    두 경우 모두 최종적으로 서비스의 JWT 토큰을 JSON으로 반환합니다.
+    웹뷰 방식(GET)과 네이티브 SDK 방식(POST)을 모두 지원하는 통합 카카오 로그인 엔드포인트.
     """
     adapter_class = KakaoOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "https://www.no-plan.cloud/api/v1/users/kakao/" # 카카오 개발자 콘솔에 등록된 리디렉션 URI
+    callback_url = "https://www.no-plan.cloud/api/v1/users/kakao/"
 
     def get(self, request, *args, **kwargs):
-        # 1. 웹 브라우저 환경에서 카카오 로그인 후 리디렉션되어 '인가 코드'를 GET 파라미터로 받음
+        # 1. 웹뷰를 통해 GET 요청으로 들어온 'code'를 추출합니다.
         code = request.query_params.get('code')
         if not code:
-            return Response(
-                {"error": "인가 코드가 URL 파라미터에 없습니다."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # 2. 받은 인가 코드로 카카오에 access_token을 요청
-        token_url = "https://kauth.kakao.com/oauth/token"
-        
-        # settings.py의 SOCIALACCOUNT_PROVIDERS 설정에서 client_id를 가져옴
-        client_id = settings.SOCIALACCOUNT_PROVIDERS['kakao']['APP']['client_id']
-        
-        data = {
-            "grant_type": "authorization_code",
-            "client_id": client_id,
-            "redirect_uri": self.callback_url,
-            "code": code,
-        }
-        
-        # 카카오 서버로 토큰 요청
-        token_response = requests.post(token_url, data=data)
-        token_json = token_response.json()
+            return Response({"error": "URL 쿼리 파라미터에 'code'가 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 토큰 요청 실패 시 에러 응답
-        if 'error' in token_json:
-            return Response(
-                {"error": token_json.get('error_description', '카카오 토큰 발급에 실패했습니다.')},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        kakao_access_token = token_json.get("access_token")
-
-        # 3. 받은 access_token을 사용하여 이 클래스의 post 메소드를 호출
-        #    이렇게 하면 웹 요청(code)을 앱 요청(access_token)과 동일한 로직으로 처리할 수 있음
-        request.data['access_token'] = kakao_access_token
-        return self.post(request, *args, **kwargs)
+        # 2. 'code'를 'access_token'으로 교환합니다.
+        try:
+            token_url = "https://kauth.kakao.com/oauth/token"
+            client_id = settings.SOCIALACCOUNT_PROVIDERS['kakao']['APP']['client_id']
+            data = {
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "redirect_uri": self.callback_url,
+                "code": code,
+            }
+            token_response = requests.post(token_url, data=data)
+            token_response.raise_for_status()
+            token_json = token_response.json()
+            access_token = token_json.get("access_token")
+            if not access_token:
+                return Response({"error": "카카오로부터 액세스 토큰을 받아오지 못했습니다."}, status=status.HTTP_400_BAD_REQUEST)
+        except requests.exceptions.RequestException as e:
+            return Response({"error": f"카카오 서버 통신 오류: {e}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+        # 3. access_token을 딕셔너리에 담아, 공통 처리 메소드로 전달합니다.
+        auth_data = {'access_token': access_token}
+        return self.process_login(request, auth_data)
 
 
     def post(self, request, *args, **kwargs):
-        # dj-rest-auth의 기본 로직을 타되, HTML 리디렉션 대신 JSON을 직접 만들어 반환하도록 오버라이딩.
-        
-        # 1. 부모 클래스의 시리얼라이저를 통해 sociallogin 객체를 가져옴
-        #    이 과정에서 access_token 유효성 검증, 유저 생성/조회(어댑터 실행)가 일어남
+        # 1. 네이티브 앱을 통해 POST 요청으로 들어온 'access_token'을 사용합니다.
+        auth_data = request.data
+        if not auth_data.get('access_token'):
+            return Response({"error": "POST 본문에 'access_token'이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # 2. 데이터를 그대로 공통 처리 메소드로 전달합니다.
+        return self.process_login(request, auth_data)
+
+    def process_login(self, request, auth_data):
+        # [HELPER METHOD] GET과 POST의 로그인 후반 작업을 공통으로 처리합니다.
         try:
-            self.serializer = self.get_serializer(data=request.data)
+            self.serializer = self.get_serializer(data=auth_data)
             self.serializer.is_valid(raise_exception=True)
-            # sociallogin 객체는 유효성 검사 후 serializer 내부에 저장됨
             sociallogin = self.serializer.validated_data.get('sociallogin')
+            if not sociallogin:
+                return Response({"error": "SocialLogin 정보를 찾을 수 없습니다."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         except Exception as e:
-            # 토큰이 유효하지 않거나 다른 문제가 발생했을 때
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. allauth의 표준 로그인/연결 로직을 실행
+        # allauth 로그인 및 JWT 생성/반환
         sociallogin.login(request)
-
-        # 3. 로그인된 사용자 객체를 가져옴
         user = sociallogin.user
-
-        # 4. 직접 JWT 토큰을 생성하여 응답 (CustomJWTSerializer 사용)
-        #    CustomJWTSerializer는 'user' 속성을 가진 객체를 인스턴스로 기대하므로,
-        #    간단한 컨테이너 클래스를 만들어 user 객체를 감싸서 전달합니다.
-        class UserContainer:
-            def __init__(self, user_instance):
-                self.user = user_instance
-
-        jwt_serializer = CustomJWTSerializer(instance=UserContainer(user), context={'request': request})
-        response_data = jwt_serializer.to_representation(UserContainer(user))
-        
-        # 5. 성공적으로 생성된 토큰과 사용자 정보가 담긴 JSON을 반환
-        return Response(response_data, status=status.HTTP_200_OK)
+        refresh = RefreshToken.for_user(user)
+        token_data = {
+            'access_token': str(refresh.access_token),
+            'refresh_token': str(refresh),
+            'user': user
+        }
+        jwt_serializer = CustomJWTSerializer(instance=token_data, context={'request': request})
+        return Response(jwt_serializer.data, status=status.HTTP_200_OK)
 
 
 # ===================================================================
@@ -139,10 +125,8 @@ def FindRegionView(request):
 # ===================================================================
 # 일반 회원가입, 정보 조회, 비밀번호 변경, 로그아웃
 # ===================================================================
-
 class RegisterView(generics.CreateAPIView):
-    def get_queryset(self):
-        return User.objects.all()
+    queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
 
