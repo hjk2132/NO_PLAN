@@ -28,7 +28,7 @@ SOCIALACCOUNT_PROVIDERS = {
     'kakao': {
         'APP': {
             'client_id': os.getenv('KAKAO_API_KEY'),
-            'secret': '',
+            'secret': os.getenv('KAKAO_CLIENT_SECRET'),
             'key': ''
         }
     }
