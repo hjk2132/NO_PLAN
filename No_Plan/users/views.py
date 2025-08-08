@@ -53,12 +53,24 @@ class KakaoLogin(SocialLoginView):
         try:
             token_url = "https://kauth.kakao.com/oauth/token"
             client_id = settings.SOCIALACCOUNT_PROVIDERS['kakao']['APP']['client_id']
+            # ===================================================================
+            # [최종 수정된 부분]
+            # client_secret 값을 settings에서 올바르게 읽어옵니다.
+            # ===================================================================
+            client_secret = settings.SOCIALACCOUNT_PROVIDERS['kakao']['APP']['secret']
+
             data = {
                 "grant_type": "authorization_code",
                 "client_id": client_id,
                 "redirect_uri": self.callback_url,
                 "code": code,
+                # ===================================================================
+                # [최종 수정된 부분]
+                # 요청 데이터에 client_secret을 포함시킵니다.
+                # ===================================================================
+                "client_secret": client_secret,
             }
+
             token_response = requests.post(token_url, data=data)
             token_response.raise_for_status()
             token_json = token_response.json()
@@ -71,10 +83,11 @@ class KakaoLogin(SocialLoginView):
                     {"error": "카카오로부터 액세스 토큰을 받아오지 못했습니다.", "details": error_description},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-                
+
         except requests.exceptions.RequestException as e:
+            # raise_for_status()에서 발생한 4xx, 5xx 에러를 포함합니다.
             return Response({"error": f"카카오 서버 통신 오류: {e}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-            
+
         auth_data = {'access_token': access_token}
         return self.process_login(request, auth_data)
 
@@ -90,14 +103,14 @@ class KakaoLogin(SocialLoginView):
             # dj-rest-auth의 시리얼라이저를 통해 SocialLogin 객체 생성 시도
             self.serializer = self.get_serializer(data=auth_data)
             self.serializer.is_valid(raise_exception=True)
-            
+
             # validated_data에서 sociallogin 객체를 가져옴
             sociallogin = self.serializer.validated_data.get('sociallogin')
-            
+
             # 만약의 경우를 대비한 방어 코드 (adapter 수정으로 해결되지만, 유지하는 것이 안전)
             if not sociallogin:
                 return Response(
-                    {"error": "SocialLogin 객체를 생성하지 못했습니다. 서버 로그를 확인해주세요."}, 
+                    {"error": "SocialLogin 객체를 생성하지 못했습니다. 서버 로그를 확인해주세요."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
@@ -110,7 +123,7 @@ class KakaoLogin(SocialLoginView):
 
         # allauth를 통해 실제 Django 세션에 로그인 처리
         sociallogin.login(request)
-        
+
         # JWT 토큰 생성 및 반환
         user = sociallogin.user
         refresh = RefreshToken.for_user(user)
@@ -119,7 +132,7 @@ class KakaoLogin(SocialLoginView):
             'refresh_token': str(refresh),
             'user': user  # user 객체를 넘겨주어야 CustomJWTSerializer가 인식
         }
-        
+
         # 커스텀 JWT 시리얼라이저로 최종 응답 생성
         jwt_serializer = CustomJWTSerializer(instance=token_data, context={'request': request})
         return Response(jwt_serializer.data, status=status.HTTP_200_OK)
@@ -325,4 +338,3 @@ class BookmarkDetailView(generics.DestroyAPIView):
 
     def get_queryset(self):
         return Bookmark.objects.filter(user=self.request.user)
-
