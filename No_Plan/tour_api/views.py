@@ -51,12 +51,13 @@ class AsyncAPIView(APIView):
 
 
 # ===================================================================
-# populartimes 데이터 가공 헬퍼 함수
+# populartimes 데이터 가공 헬퍼 함수 (영문 상태값 버전)
 # ===================================================================
 def process_populartimes_data(pop_data):
     """
     거대한 populartimes 원본 데이터를 클라이언트가 사용하기 쉬운
     핵심 정보만 담은 작은 딕셔너리로 가공합니다.
+    [수정] current_popularity를 표준화된 영어 상태 텍스트로 변환합니다.
     """
     if not pop_data:
         return None
@@ -64,10 +65,24 @@ def process_populartimes_data(pop_data):
     try:
         processed = {
             "rating": pop_data.get("rating"),
-            "rating_n": pop_data.get("rating_n"),
-            "current_popularity": pop_data.get("current_popularity")
+            "rating_n": pop_data.get("rating_n")
         }
 
+        # current_popularity를 'not_busy', 'normal', 'busy'로 변환
+        current_pop = pop_data.get("current_popularity")
+        status_text = "unknown"  # 기본값
+        if current_pop is None:
+            status_text = "not_busy"
+        elif current_pop >= 70:  # 70% 이상이면 'busy'
+            status_text = "busy"
+        elif current_pop >= 40:  # 40% 이상이면 'normal'
+            status_text = "normal"
+        else:  # 40% 미만이면 'not_busy'
+            status_text = "not_busy"
+
+        processed["current_status"] = status_text
+
+        # 요일별 데이터에서 가장 붐비는 시간대 정보만 추출
         if "populartimes" in pop_data and pop_data["populartimes"]:
             busiest_day = ""
             busiest_hour = -1
@@ -175,9 +190,6 @@ async def get_ai_recommendations(places: list, adjectives: list, place_type: str
         for place, pop_result in zip(places, populartimes_results)
     }
 
-    # ===================================================================
-    # [새로 추가된 부분 2] populartimes 데이터 가공 함수 호출
-    # ===================================================================
     for _, row in crawling_df.iterrows():
         contentid = row['contentid']
         if contentid in original_place_map:
@@ -185,7 +197,6 @@ async def get_ai_recommendations(places: list, adjectives: list, place_type: str
             original_place_map[contentid]['recommend_reason'] = row.get('추천이유')
             original_place_map[contentid]['hashtags'] = row.get('해시태그')
 
-            # 원본 데이터를 그대로 넣는 대신, 가공 함수를 호출하여 작게 만든 데이터를 넣습니다.
             raw_pop_data = contentid_to_populartimes.get(contentid)
             original_place_map[contentid]['populartimes'] = process_populartimes_data(raw_pop_data)
 
