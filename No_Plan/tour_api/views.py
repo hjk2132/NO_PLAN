@@ -26,7 +26,7 @@ from users.models import Trip, VisitedContent
 
 
 # ===================================================================
-# [수정된 부분] AsyncAPIView의 dispatch 메소드 수정
+# AsyncAPIView의 dispatch 메소드
 # ===================================================================
 class AsyncAPIView(APIView):
     async def dispatch(self, request, *args, **kwargs):
@@ -36,9 +36,6 @@ class AsyncAPIView(APIView):
         self.request = request
         self.headers = self.default_response_headers
         try:
-            # 동기적으로 실행되는 initial 메소드를 sync_to_async로 감싸서 호출합니다.
-            # 이 부분이 인증(authentication)과 권한(permission) 체크를 포함합니다.
-            # thread_sensitive=True는 Django의 데이터베이스 연결을 안전하게 처리하기 위한 권장 옵션입니다.
             await sync_to_async(self.initial, thread_sensitive=True)(request, *args, **kwargs)
 
             if request.method.lower() in self.http_method_names:
@@ -51,6 +48,49 @@ class AsyncAPIView(APIView):
             response = self.handle_exception(exc)
         self.response = self.finalize_response(request, response, *args, **kwargs)
         return self.response
+
+
+# ===================================================================
+# populartimes 데이터 가공 헬퍼 함수
+# ===================================================================
+def process_populartimes_data(pop_data):
+    """
+    거대한 populartimes 원본 데이터를 클라이언트가 사용하기 쉬운
+    핵심 정보만 담은 작은 딕셔너리로 가공합니다.
+    """
+    if not pop_data:
+        return None
+
+    try:
+        processed = {
+            "rating": pop_data.get("rating"),
+            "rating_n": pop_data.get("rating_n"),
+            "current_popularity": pop_data.get("current_popularity")
+        }
+
+        if "populartimes" in pop_data and pop_data["populartimes"]:
+            busiest_day = ""
+            busiest_hour = -1
+            max_popularity = -1
+
+            for day_data in pop_data["populartimes"]:
+                for hour, popularity in enumerate(day_data["data"]):
+                    if popularity > max_popularity:
+                        max_popularity = popularity
+                        busiest_day = day_data["name"]
+                        busiest_hour = hour
+
+            if busiest_day:
+                processed["busiest_time"] = {
+                    "day": busiest_day,
+                    "hour": f"{busiest_hour}:00"
+                }
+
+        return processed
+
+    except (TypeError, IndexError, KeyError) as e:
+        print(f"populartimes 데이터 처리 중 오류: {e}")
+        return None
 
 
 async def get_populartimes_async(place_title: str, place_address: str):
@@ -95,7 +135,7 @@ async def get_ai_recommendations(places: list, adjectives: list, place_type: str
         populartimes_results = all_results[2:]
         t2 = time.time()
         print(f"  [1/4] 블로그 크롤링, 쿼리 임베딩, 혼잡도 조회 동시 완료: {t2 - t1:.2f} 초 ({len(places)}개 중 {len(crawling_df)}개 장소)")
-        
+
         valid_ids = set(crawling_df['contentid'])
         places = [p for p in places if p['contentid'] in valid_ids]
         if crawling_df.empty or crawling_df['텍스트'].str.strip().eq('').all():
@@ -135,13 +175,19 @@ async def get_ai_recommendations(places: list, adjectives: list, place_type: str
         for place, pop_result in zip(places, populartimes_results)
     }
 
+    # ===================================================================
+    # [새로 추가된 부분 2] populartimes 데이터 가공 함수 호출
+    # ===================================================================
     for _, row in crawling_df.iterrows():
         contentid = row['contentid']
         if contentid in original_place_map:
             original_place_map[contentid]['similarity'] = row.get('similarity')
             original_place_map[contentid]['recommend_reason'] = row.get('추천이유')
             original_place_map[contentid]['hashtags'] = row.get('해시태그')
-            original_place_map[contentid]['populartimes'] = contentid_to_populartimes.get(contentid)
+
+            # 원본 데이터를 그대로 넣는 대신, 가공 함수를 호출하여 작게 만든 데이터를 넣습니다.
+            raw_pop_data = contentid_to_populartimes.get(contentid)
+            original_place_map[contentid]['populartimes'] = process_populartimes_data(raw_pop_data)
 
     sorted_places = sorted(
         original_place_map.values(),
@@ -183,6 +229,7 @@ async def fetch_restaurants_from_tour_api(session, params):
 async def fetch_attractions_from_tour_api(session, params):
     return await fetch_from_tour_api(session, params)
 
+
 MAX_PLACES_FOR_AI = 30
 
 
@@ -210,7 +257,7 @@ class RestaurantListView(AsyncAPIView):
         if adjectives_str:
             places_for_ai = sorted_restaurants[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '음식점')
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type='음식점')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_restaurants, status=status.HTTP_200_OK)
@@ -235,7 +282,7 @@ class CafeListView(AsyncAPIView):
         if adjectives_str:
             places_for_ai = sorted_cafes[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '카페')
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type='카페')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_cafes, status=status.HTTP_200_OK)
@@ -260,7 +307,7 @@ class TouristAttractionListView(AsyncAPIView):
         if adjectives_str:
             places_for_ai = sorted_attractions[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '관광지')
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type='관광지')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_attractions, status=status.HTTP_200_OK)
@@ -285,7 +332,7 @@ class AccommodationListView(AsyncAPIView):
         if adjectives_str:
             places_for_ai = sorted_accommodations[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
-            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type = '숙소')
+            final_results = await get_ai_recommendations(places_for_ai, adjectives, place_type='숙소')
             return Response(final_results, status=status.HTTP_200_OK)
         else:
             return Response(sorted_accommodations, status=status.HTTP_200_OK)
@@ -346,7 +393,7 @@ class TripSummaryView(AsyncAPIView):
         else:
             for i, place in enumerate(visited_places):
                 description = (
-                    f"{i+1}. {place.title}: "
+                    f"{i + 1}. {place.title}: "
                     f"이곳에 대해 사용자가 남긴 추천 이유는 '{place.recommend_reason or '특이사항 없음'}' 이며, "
                     f"관련 해시태그는 '{place.hashtags or '없음'}' 입니다."
                 )
@@ -358,7 +405,7 @@ class TripSummaryView(AsyncAPIView):
         trip = get_object_or_404(Trip, id=trip_id, user=user)
         visited_places = list(VisitedContent.objects.filter(trip=trip).order_by('created_at'))
         return trip, visited_places
-    
+
     @sync_to_async
     def _save_trip_summary(self, trip: Trip, summary: str):
         trip.summary = summary
@@ -368,7 +415,7 @@ class TripSummaryView(AsyncAPIView):
         try:
             trip, visited_places = await self._get_trip_and_places(trip_id, request.user)
         except ObjectDoesNotExist:
-             return Response({"error": "해당 여행을 찾을 수 없거나 접근 권한이 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "해당 여행을 찾을 수 없거나 접근 권한이 없습니다."}, status=status.HTTP_404_NOT_FOUND)
 
         if not visited_places:
             return Response({"error": "요약을 생성할 방문 기록이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
