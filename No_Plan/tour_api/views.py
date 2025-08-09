@@ -392,24 +392,15 @@ class TripSummaryView(AsyncAPIView):
     permission_classes = [IsAuthenticated]
 
     def _prepare_trip_context(self, trip: Trip, visited_places: list[VisitedContent]) -> str:
-        context_parts = [
-            f"- 여행 지역: {trip.region}",
-            f"- 동행자: {trip.companion or '정보 없음'}",
-            f"- 이동수단: {trip.transportation or '정보 없음'}",
-            f"- 원했던 여행 분위기(형용사): {trip.adjectives or '정보 없음'}"
-        ]
-        visited_descriptions = ["\n[방문한 장소 목록]"]
+        visited_descriptions = []
         if not visited_places:
             visited_descriptions.append("방문한 장소가 없습니다.")
         else:
             for i, place in enumerate(visited_places):
-                description = (
-                    f"{i + 1}. {place.title}: "
-                    f"이곳에 대해 사용자가 남긴 추천 이유는 '{place.recommend_reason or '특이사항 없음'}' 이며, "
-                    f"관련 해시태그는 '{place.hashtags or '없음'}' 입니다."
-                )
+                description = f"{i + 1}. {place.title}: '{place.recommend_reason}'"
                 visited_descriptions.append(description)
-        return "\n".join(context_parts + visited_descriptions)
+        trip_info = [trip.region, trip.companion, trip.transportation, trip.adjectives, visited_descriptions]
+        return trip_info
 
     @sync_to_async
     def _get_trip_and_places(self, trip_id: int, user):
@@ -431,14 +422,11 @@ class TripSummaryView(AsyncAPIView):
         if not visited_places:
             return Response({"error": "요약을 생성할 방문 기록이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
 
-        trip_context = self._prepare_trip_context(trip, visited_places)
-        print("--- AI에게 전달될 콘텍스트 ---")
-        print(trip_context)
-        print("--------------------------")
+        trip_info = self._prepare_trip_context(trip, visited_places)
 
         try:
             async with RecommendationEngine() as recomm_engine:
-                summary_text = await recomm_engine.generate_trip_summary(trip_context)
+                summary_text = await recomm_engine.generate_trip_summary(trip_info)
         except Exception as e:
             return Response({"error": f"AI 요약 생성 중 서버 오류 발생: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

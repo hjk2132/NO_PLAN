@@ -225,19 +225,28 @@ class RecommendationEngine:
     # ===================================================================
     # 여행 요약 생성 (08.08 추가 내용)
     # ===================================================================
-    async def generate_trip_summary(self, trip_context: str) -> str:
+    async def generate_trip_summary(self, trip_info: list) -> str:
         """
         주어진 여행 정보 콘텍스트를 바탕으로 AI 여행 요약을 생성합니다.
         """
+        companion = trip_info[1]
+        transportation = trip_info[2]
+        adjectives = trip_info[3] 
+        visited_descriptions = " ".join(trip_info[4]) 
         prompt = f"""
-당신은 여행의 추억을 아름답게 정리해주는 여행 작가입니다. 아래는 사용자의 여행 기록 데이터입니다. 이 데이터를 바탕으로 전체 여행을 아우르는 감성적이고 구체적인 여행 요약을 3~4개의 문장으로 작성해주세요.
-
-- 여행의 전체적인 분위기(사용자가 원했던 형용사)와 방문했던 장소 1~2곳의 특징을 자연스럽게 연결해주세요.
-- 친구에게 여행 후기를 말해주는 것처럼 친근하고 부드러운 존댓말을 사용해주세요.
-- 최종 결과물은 다른 설명 없이 오직 '요약 문장'만 있어야 합니다.
-
-[여행 기록 데이터]
-{trip_context}
+당신의 역할은 이번 여행의 종합적인 후기를 작성하는 것입니다.
+아래 여행 정보를 기반으로, 여행의 전체적인 후기를 예상하고, 여정을 다른 사람에게 소개하는 글을 작성하세요.
+'형용사'는 여행에 대해 원했던 분위기이고, "형용사 의미"는 "형용사의 사전적 의미에 대한 정보입니다.
+여행의 전체적인 분위기(사용자가 원했던 형용사)와 방문했던 장소 1~2곳의 특징을 자연스럽게 연결해주세요.
+친구에게 여행 후기를 말해주는 것처럼 친근하고 부드러운 존댓말을 사용해주세요.
+최종 결과물은 다른 설명 없이 오직 '요약 문장'만 있어야 합니다.
+---
+[여행 정보]
+- 동행자: {companion}
+- 이동수단: {transportation}
+- 형용사: {adjectives}
+- 형용사 의미: {self.adjectives_to_query(adjectives)}
+- 방문 장소 및 특징: {visited_descriptions}
 """
         try:
             resp = await self.client.chat.completions.create(
