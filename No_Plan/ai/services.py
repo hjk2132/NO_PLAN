@@ -231,7 +231,7 @@ class RecommendationEngine:
         """
         companion = trip_info[1]
         transportation = trip_info[2]
-        adjectives = trip_info[3] 
+        adjectives = trip_info[3].split(',')
         visited_descriptions = " ".join(trip_info[4]) 
         prompt = f"""
 당신의 역할은 이번 여행의 종합적인 후기를 작성하는 것입니다.
@@ -248,6 +248,7 @@ class RecommendationEngine:
 - 형용사 의미: {self.adjectives_to_query(adjectives)}
 - 방문 장소 및 특징: {visited_descriptions}
 """
+
         try:
             resp = await self.client.chat.completions.create(
                 model=self.chat_model,
@@ -259,4 +260,4 @@ class RecommendationEngine:
             return summary
         except Exception as e:
             print(f"[오류] 여행 요약 생성 실패: {e}")
-            return "여행 요약을 생성하는 데 실패했습니다."
+            return "여행 요약을 생성하는 데 실패했습니다." 
