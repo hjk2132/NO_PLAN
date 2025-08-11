@@ -4,6 +4,11 @@ from .models import User, UserInfo, Trip, VisitedContent, Bookmark
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from dj_rest_auth.serializers import LoginSerializer, JWTSerializer
+# --- 아래 4개의 import를 파일 상단에 추가해주세요 ---
+from dj_rest_auth.registration.serializers import SocialLoginSerializer
+from allauth.account.utils import complete_signup
+from allauth.socialaccount.helpers import complete_social_login
+from requests.exceptions import HTTPError
 
 
 # --- 회원 정보 조회를 위한 시리얼라이저 ---
@@ -12,7 +17,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'name', 'email', 'is_info_exist')  # fields에도 추가
+        fields = ('id', 'name', 'email', 'is_info_exist')
 
     def get_is_info_exist(self, obj):
         return UserInfo.objects.filter(user=obj).exists()
@@ -109,15 +114,10 @@ class CustomJWTSerializer(JWTSerializer):
     is_info_exist = serializers.SerializerMethodField()
 
     def get_is_info_exist(self, obj):
-        user = obj.user
-        return UserInfo.objects.filter(user=user).exists()
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        user_serializer = UserSerializer(instance.user)
-        representation['user'] = user_serializer.data
-        representation['is_info_exist'] = self.get_is_info_exist(instance)
-        return representation
+        user_instance = obj.get('user')
+        if user_instance:
+            return UserInfo.objects.filter(user=user_instance).exists()
+        return False
 
 
 # --- 비밀번호 변경을 위한 시리얼라이저 ---
@@ -156,19 +156,8 @@ class VisitedContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = VisitedContent
         fields = (
-            'id',
-            'user',
-            'trip',
-            'content_id',
-            'title',
-            'first_image',
-            'addr1',
-            'mapx',
-            'mapy',
-            'overview',
-            'created_at',
-            'hashtags',
-            'recommend_reason'
+            'id', 'user', 'trip', 'content_id', 'title', 'first_image', 'addr1', 'mapx',
+            'mapy', 'overview', 'created_at', 'hashtags', 'recommend_reason'
         )
         read_only_fields = ('id', 'user', 'trip', 'created_at')
 
@@ -180,16 +169,8 @@ class BookmarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bookmark
         fields = (
-            'id',
-            'user',
-            'content_id',
-            'title',
-            'first_image',
-            'addr1',
-            'overview',
-            'created_at',
-            'hashtags',
-            'recommend_reason'
+            'id', 'user', 'content_id', 'title', 'first_image', 'addr1', 'overview',
+            'created_at', 'hashtags', 'recommend_reason'
         )
         read_only_fields = ('id', 'user', 'created_at')
 
@@ -199,3 +180,65 @@ class BookmarkSerializer(serializers.ModelSerializer):
         if Bookmark.objects.filter(user=user, content_id=content_id).exists():
             raise serializers.ValidationError({"detail": "이미 북마크에 추가된 장소입니다."})
         return data
+
+
+# ### 이 클래스 전체를 파일 맨 아래에 추가해주세요! ###
+# 이메일 중복 및 allauth 버전 호환성 오류를 모두 해결하는 커스텀 소셜 로그인 시리얼라이저
+class CustomSocialLoginSerializer(SocialLoginSerializer):
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if not request:
+            raise serializers.ValidationError("Request context is not available.")
+
+        try:
+            # dj-rest-auth의 기본 유효성 검사를 먼저 시도합니다.
+            return super().validate(attrs)
+        except serializers.ValidationError as e:
+            # 유효성 검사에서 '이미 가입된 유저' 오류가 발생했을 때만 아래 로직을 실행합니다.
+            if 'User is already registered with this e-mail address.' in str(e):
+
+                # allauth 어댑터와 클라이언트를 동적으로 가져옵니다.
+                from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+                from allauth.socialaccount.providers.kakao.views import KakaoOAuth2Adapter
+
+                adapter = KakaoOAuth2Adapter(request)
+                provider = adapter.get_provider()
+                app = provider.app
+
+                # dj-rest-auth가 사용하는 client를 재구성합니다.
+                client = OAuth2Client(
+                    request,
+                    app.client_id,
+                    app.secret,
+                    adapter.access_token_method,
+                    adapter.access_token_url,
+                    # ### 여기가 핵심 수정 부분입니다! ###
+                    # adapter.callback_url 대신 adapter.get_callback_url()을 호출합니다.
+                    adapter.get_callback_url(request),
+                    provider.get_scope(request),
+                    key=app.key,
+                    cert=app.cert,
+                )
+
+                token = {'access_token': attrs.get('access_token')}
+                access_token = adapter.parse_token_response(token)
+                sociallogin = adapter.complete_login(request, app, access_token)
+                sociallogin.token = access_token
+
+                # allauth의 로그인 완료 헬퍼 함수를 호출합니다.
+                complete_social_login(request, sociallogin)
+
+                # request.user에 로그인된 사용자가 있는지 최종 확인합니다.
+                if not getattr(request, 'user', None) or not request.user.is_authenticated:
+                    raise serializers.ValidationError(
+                        "Failed to log in the user after attempting to connect social account.")
+
+                # 성공적으로 로그인된 user 객체를 attrs에 담아 반환합니다.
+                attrs['user'] = request.user
+                return attrs
+            else:
+                # '이미 가입된 유저' 문제가 아닌 다른 유효성 오류는 그대로 발생시킵니다.
+                raise e
+        except HTTPError as e:
+            # 카카오 서버와의 통신 자체에서 에러가 발생한 경우
+            raise serializers.ValidationError(str(e))

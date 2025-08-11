@@ -74,7 +74,7 @@ class BlogCrawler:
     async def _search_blogs_aio(self, session: aiohttp.ClientSession, api_key: str, name: str, addr: str) -> list[str]:
         URL = "https://dapi.kakao.com/v2/search/blog"
         headers = {"Authorization": f"KakaoAK {api_key}"}
-        addr = ' '.join(addr.split()[:2]) # 주소의 시, 구만 사용
+        addr = ' '.join(addr.split()[:2])  # 주소의 시, 구만 사용
         params = {"query": f'{name} {addr}', "size": 10}
         try:
             async with session.get(URL, headers=headers, params=params, timeout=5) as resp:
@@ -83,12 +83,12 @@ class BlogCrawler:
                     return []
                 data = await resp.json()
                 urls = [doc['url'] for doc in data.get('documents', [])]
-                return [url for url in urls if 'https://blog.naver.com' in url][:3] # 네이버 블로그만을 추출
+                return [url for url in urls if 'https://blog.naver.com' in url][:3]  # 네이버 블로그만을 추출
         except Exception as e:
             print(f"Daum API request failed for '{name}': {e}")
             return []
 
-    async def crawl_all(self, place_infos_with_id: list[tuple[str, str, str]], print_text = False) -> pd.DataFrame:
+    async def crawl_all(self, place_infos_with_id: list[tuple[str, str, str]], print_text=False) -> pd.DataFrame:
         daum_api_key = settings.DAUM_API_KEY
 
         # 각 장소에 대한 전체 처리 프로세스를 동시 30개로 제한
@@ -104,28 +104,29 @@ class BlogCrawler:
                 crawled_texts = await gather_with_concurrency(5, *crawl_tasks)
                 truncated_texts = [self.truncate(text) for text in crawled_texts]
                 incorrect_texts = [text if (text == self.placeholder)
-                                           or (re.sub(r'\([^)]*\)', '', name.split()[0]) in text.replace(" ", "")) # 이름에서 지졈명과 괄호 안 내용 삭제, 공백을 삭제한 블로그 텍스트와 비교
-                    else '<INCORRECT_CONTENT>'
-                    for text in truncated_texts]
-                
+                                           or (re.sub(r'\([^)]*\)', '', name.split()[0]) in text.replace(" ",
+                                                                                                         ""))  # 이름에서 지졈명과 괄호 안 내용 삭제, 공백을 삭제한 블로그 텍스트와 비교
+                                   else '<INCORRECT_CONTENT>'
+                                   for text in truncated_texts]
+
                 # 블로그 결과 디버깅용 print_text
                 if print_text:
                     combined_text = " ".join(incorrect_texts)
                     return {"contentid": contentid, "관광지명": name, "텍스트": combined_text, 'urls': urls}
-                
-                # placeholder 제거 
+
+                # placeholder 제거
                 clean_text = [t for t in incorrect_texts if t not in ("<INCORRECT_CONTENT>", self.placeholder)]
                 combined_text = " ".join(clean_text)
                 # 결과가 없거나 불일치한 블로그만 있는 경우 None반환
                 if not combined_text.strip():
                     return None
-                    
+
             return {"contentid": contentid, "관광지명": name, "텍스트": combined_text, 'urls': urls}
 
         async with aiohttp.ClientSession() as session:
             tasks = [process_place(cid, n, a, session) for cid, n, a in place_infos_with_id]
             raw_results = await gather_with_concurrency(CONCURRENCY_LIMIT_PLACES, *tasks)
-            final_results = [r for r in raw_results if r is not None] # 크롤링 결과가 없는 장소 제거
+            final_results = [r for r in raw_results if r is not None]  # 크롤링 결과가 없는 장소 제거
 
         return pd.DataFrame(final_results)
 
@@ -156,15 +157,15 @@ class RecommendationEngine:
 
     @staticmethod
     def adjectives_to_query(adjectives: list[str]) -> str:
-        adj_mean_mapping_dict = {'고즈넉한':'고요하고 아늑하고 잠잠하다', 
-                                 '낭만적인':'현실적이지 않고 신비적이며 공상적인 것. 또는 감동적이며 달콤한 분위기가 있다.', 
-                                 '모던한':'세련되고 현대적이다.', 
-                                 '힙한':'고유한 개성과 감각을 가지고 있으면서도 최신 유행에 밝고 신선하다', 
-                                 '고급스러운':'물건이나 시설 따위의 품질이 뛰어나고 값이 비싼 듯하다.', 
-                                 '전통적인':'예로부터 이어져 내려오는 듯하다.', 
-                                 '활동적인':'몸을 움직여 행동하다.', 
-                                 '산뜻한':'기분이나 느낌이 깨끗하고 시원하다',
-                                 '정겨운':'정이 넘칠 정도로 매우 다정하다.' }
+        adj_mean_mapping_dict = {'고즈넉한': '고요하고 아늑하고 잠잠하다',
+                                 '낭만적인': '현실적이지 않고 신비적이며 공상적인 것. 또는 감동적이며 달콤한 분위기가 있다.',
+                                 '모던한': '세련되고 현대적이다.',
+                                 '힙한': '고유한 개성과 감각을 가지고 있으면서도 최신 유행에 밝고 신선하다',
+                                 '고급스러운': '물건이나 시설 따위의 품질이 뛰어나고 값이 비싼 듯하다.',
+                                 '전통적인': '예로부터 이어져 내려오는 듯하다.',
+                                 '활동적인': '몸을 움직여 행동하다.',
+                                 '산뜻한': '기분이나 느낌이 깨끗하고 시원하다',
+                                 '정겨운': '정이 넘칠 정도로 매우 다정하다.'}
         return " ".join(adj_mean_mapping_dict[adj] for adj in adjectives)
 
     def recommend_spots(self, df: pd.DataFrame, query_emb: list[float]) -> pd.DataFrame:
@@ -176,7 +177,8 @@ class RecommendationEngine:
         df_copy["similarity"] = sims
         return df_copy.sort_values(by="similarity", ascending=False).head(self.top_k)
 
-    async def generate_reason_and_hashtags(self, spot_name: str, adjectives: list[str], adjectives_query: str, blog_text: str, place_type: str) -> tuple[str, str]:
+    async def generate_reason_and_hashtags(self, spot_name: str, adjectives: list[str], adjectives_query: str,
+                                           blog_text: str, place_type: str) -> tuple[str, str]:
         prompt = f"""
 당신의 역할은 "관광지명"과 해당 관광지의 블로그 후기인 "블로그" 텍스트를 활용하여 사용자에게 장소를 추천해주는 것입니다.
 아래 "형용사"는 사용자가 장소에 대해 원하는 분위기이고, "형용사 의미"는 "형용사의 사전적 의미에 대한 정보입니다.
@@ -221,7 +223,6 @@ class RecommendationEngine:
         df_copy["추천이유"], df_copy["해시태그"] = zip(*results)
         return df_copy
 
-
     # ===================================================================
     # 여행 요약 생성 (08.08 추가 내용)
     # ===================================================================
@@ -232,7 +233,7 @@ class RecommendationEngine:
         companion = trip_info[1]
         transportation = trip_info[2]
         adjectives = trip_info[3].split(',')
-        visited_descriptions = " ".join(trip_info[4]) 
+        visited_descriptions = " ".join(trip_info[4])
         prompt = f"""
 당신의 역할은 이번 여행의 종합적인 후기를 작성하는 것입니다.
 아래 여행 정보를 기반으로, 여행의 전체적인 후기를 예상하고, 여정을 다른 사람에게 소개하는 글을 작성하세요.

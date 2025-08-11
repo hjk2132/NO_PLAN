@@ -1,6 +1,4 @@
 # users/views.py
-
-# 기본 import
 from .models import User, UserInfo, Trip, VisitedContent, Bookmark
 from django.http import JsonResponse
 from django.conf import settings
@@ -10,132 +8,70 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
-from allauth.socialaccount.providers.kakao.views import KakaoOAuth2Adapter
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from dj_rest_auth.registration.views import SocialLoginView
-from rest_framework.exceptions import ValidationError # ValidationError 임포트
 import requests
 import concurrent.futures
-
-# kakao social log-in 관련 import
-from allauth.socialaccount.providers.kakao.views import KakaoOAuth2Adapter
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from dj_rest_auth.registration.views import SocialLoginView
-
-# kakao map (x_y 2 addr)
 from .utils import get_region_from_coords
-
-# serializers import
 from .serializers import (
-    RegisterSerializer, UserSerializer, PasswordChangeSerializer
-    , SetNameSerializer, UserInfoSerializer, TripSerializer, VisitedContentSerializer
-    , BookmarkSerializer, CustomJWTSerializer
+    RegisterSerializer, UserSerializer, PasswordChangeSerializer, SetNameSerializer,
+    UserInfoSerializer, TripSerializer, VisitedContentSerializer, BookmarkSerializer, CustomJWTSerializer
 )
 
 
 # ===================================================================
-# 소셜 로그인 (카카오)
+# 소셜 로그인 (카카오) - 직접 구현 (최종 해결책)
 # ===================================================================
-class KakaoLogin(SocialLoginView):
-    """
-    웹뷰 방식(GET)과 네이티브 SDK 방식(POST)을 모두 지원하는 통합 카카오 로그인 엔드포인트.
-    """
-    adapter_class = KakaoOAuth2Adapter
-    client_class = OAuth2Client
-    # 실제 운영 환경의 Redirect URI를 사용해야 합니다.
-    callback_url = "https://www.no-plan.cloud/api/v1/users/kakao/"
+class KakaoAPIView(APIView):
+    permission_classes = [AllowAny]
 
-    def get(self, request, *args, **kwargs):
-        code = request.query_params.get('code')
-        if not code:
-            return Response({"error": "URL 쿼리 파라미터에 'code'가 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request):
+        # 1. 프론트엔드로부터 'access_token'을 받습니다.
+        access_token = request.data.get('access_token')
+        if not access_token:
+            return Response({"error": "Access token is required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 2. 받은 access_token을 사용하여 카카오 서버에 사용자 정보를 요청합니다.
+        profile_request = requests.get(
+            "https://kapi.kakao.com/v2/user/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        # 2-1. 만약 카카오 서버가 에러를 반환하면, 그 내용을 그대로 출력하고 에러를 반환합니다.
+        if profile_request.status_code != 200:
+            return Response(
+                {"error": "Failed to get user info from Kakao.", "detail": profile_request.json()},
+                status=profile_request.status_code
+            )
+
+        profile_json = profile_request.json()
+        kakao_account = profile_json.get('kakao_account')
+        email = kakao_account.get('email')
+        nickname = kakao_account.get('profile', {}).get('nickname')
+
+        # 3. 받아온 이메일로 우리 데이터베이스에서 유저를 찾거나, 새로 만듭니다.
         try:
-            token_url = "https://kauth.kakao.com/oauth/token"
-            client_id = settings.SOCIALACCOUNT_PROVIDERS['kakao']['APP']['client_id']
-            # ===================================================================
-            # [최종 수정된 부분]
-            # client_secret 값을 settings에서 올바르게 읽어옵니다.
-            # ===================================================================
-            client_secret = settings.SOCIALACCOUNT_PROVIDERS['kakao']['APP']['secret']
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    'username': email,  # username 필드는 email과 동일하게 설정
+                    'name': nickname,
+                }
+            )
 
-            data = {
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "redirect_uri": self.callback_url,
-                "code": code,
-                # ===================================================================
-                # [최종 수정된 부분]
-                # 요청 데이터에 client_secret을 포함시킵니다.
-                # ===================================================================
-                "client_secret": client_secret,
-            }
+            # 만약 기존 유저인데 이름이 없다면, 카카오 닉네임으로 업데이트합니다.
+            if not created and not user.name:
+                user.name = nickname
+                user.save()
 
-            token_response = requests.post(token_url, data=data)
-            token_response.raise_for_status()
-            token_json = token_response.json()
-            access_token = token_json.get("access_token")
+            # 4. 우리 서비스의 JWT 토큰 (access, refresh)을 생성합니다.
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': UserSerializer(user).data
+            })
 
-            if not access_token:
-                # 카카오 응답에 access_token이 없는 경우
-                error_description = token_json.get("error_description", "알 수 없는 오류")
-                return Response(
-                    {"error": "카카오로부터 액세스 토큰을 받아오지 못했습니다.", "details": error_description},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        except requests.exceptions.RequestException as e:
-            # raise_for_status()에서 발생한 4xx, 5xx 에러를 포함합니다.
-            return Response({"error": f"카카오 서버 통신 오류: {e}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        auth_data = {'access_token': access_token}
-        return self.process_login(request, auth_data)
-
-    def post(self, request, *args, **kwargs):
-        auth_data = request.data
-        if not auth_data.get('access_token'):
-            return Response({"error": "POST 본문에 'access_token'이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
-        return self.process_login(request, auth_data)
-
-    def process_login(self, request, auth_data):
-        # [수정된 헬퍼 메소드]
-        try:
-            # dj-rest-auth의 시리얼라이저를 통해 SocialLogin 객체 생성 시도
-            self.serializer = self.get_serializer(data=auth_data)
-            self.serializer.is_valid(raise_exception=True)
-
-            # validated_data에서 sociallogin 객체를 가져옴
-            sociallogin = self.serializer.validated_data.get('sociallogin')
-
-            # 만약의 경우를 대비한 방어 코드 (adapter 수정으로 해결되지만, 유지하는 것이 안전)
-            if not sociallogin:
-                return Response(
-                    {"error": "SocialLogin 객체를 생성하지 못했습니다. 서버 로그를 확인해주세요."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-        except ValidationError as e:
-            # dj-rest-auth 또는 allauth에서 발생한 유효성 검사 오류
-            return Response({'error': '소셜 로그인 처리 중 오류가 발생했습니다.', 'details': e.detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # 그 외 예상치 못한 모든 오류
-            return Response({'error': f'알 수 없는 서버 오류가 발생했습니다: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # allauth를 통해 실제 Django 세션에 로그인 처리
-        sociallogin.login(request)
-
-        # JWT 토큰 생성 및 반환
-        user = sociallogin.user
-        refresh = RefreshToken.for_user(user)
-        token_data = {
-            'access_token': str(refresh.access_token),
-            'refresh_token': str(refresh),
-            'user': user  # user 객체를 넘겨주어야 CustomJWTSerializer가 인식
-        }
-
-        # 커스텀 JWT 시리얼라이저로 최종 응답 생성
-        jwt_serializer = CustomJWTSerializer(instance=token_data, context={'request': request})
-        return Response(jwt_serializer.data, status=status.HTTP_200_OK)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ===================================================================
