@@ -1,9 +1,3 @@
-네, 알겠습니다. 제가 분석한 프로젝트의 모든 코드와 제공해주신 예전 `README.md`, 그리고 최신 API 명세서 PDF 파일을 종합하여 **현재 프로젝트 상황에 맞는 완벽히 갱신된 `README.md` 파일을 작성**해 드리겠습니다.
-
-아래 내용을 그대로 복사하여 `README.md` 파일에 붙여넣기만 하시면 됩니다.
-
----
-
 # NO_PLAN - AI 기반 개인 맞춤 여행지 추천 API
 
 ![Project Banner](./Assets/NO_PLAN_BANNER.png)
