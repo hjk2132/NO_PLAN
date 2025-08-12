@@ -51,58 +51,43 @@ class AsyncAPIView(APIView):
 
 
 # ===================================================================
-# populartimes 데이터 가공 헬퍼 함수 (영문 상태값 버전)
+# populartimes 데이터 가공 헬퍼 함수
 # ===================================================================
 def process_populartimes_data(pop_data):
-    """
-    거대한 populartimes 원본 데이터를 클라이언트가 사용하기 쉬운
-    핵심 정보만 담은 작은 딕셔너리로 가공합니다.
-    [수정] current_popularity를 표준화된 영어 상태 텍스트로 변환합니다.
-    """
     if not pop_data:
         return None
-
     try:
         processed = {
             "rating": pop_data.get("rating"),
             "rating_n": pop_data.get("rating_n")
         }
-
-        # current_popularity를 'not_busy', 'normal', 'busy'로 변환
         current_pop = pop_data.get("current_popularity")
-        status_text = "unknown"  # 기본값
+        status_text = "unknown"
         if current_pop is None:
             status_text = "not_busy"
-        elif current_pop >= 70:  # 70% 이상이면 'busy'
+        elif current_pop >= 70:
             status_text = "busy"
-        elif current_pop >= 40:  # 40% 이상이면 'normal'
+        elif current_pop >= 40:
             status_text = "normal"
-        else:  # 40% 미만이면 'not_busy'
+        else:
             status_text = "not_busy"
-
         processed["current_status"] = status_text
-
-        # 요일별 데이터에서 가장 붐비는 시간대 정보만 추출
         if "populartimes" in pop_data and pop_data["populartimes"]:
             busiest_day = ""
             busiest_hour = -1
             max_popularity = -1
-
             for day_data in pop_data["populartimes"]:
                 for hour, popularity in enumerate(day_data["data"]):
                     if popularity > max_popularity:
                         max_popularity = popularity
                         busiest_day = day_data["name"]
                         busiest_hour = hour
-
             if busiest_day:
                 processed["busiest_time"] = {
                     "day": busiest_day,
                     "hour": f"{busiest_hour}:00"
                 }
-
         return processed
-
     except (TypeError, IndexError, KeyError) as e:
         print(f"populartimes 데이터 처리 중 오류: {e}")
         return None
@@ -125,6 +110,9 @@ async def get_populartimes_async(place_title: str, place_address: str):
         return None
 
 
+# ##################################################################
+# ### ▼▼▼ 이 함수에 방어 로직이 추가되었습니다 ▼▼▼ ###
+# ##################################################################
 async def get_ai_recommendations(places: list, adjectives: list, place_type: str) -> list:
     print("\n==============[AI 추천 파이프라인 시작]===============")
     total_start_time = time.time()
@@ -149,7 +137,22 @@ async def get_ai_recommendations(places: list, adjectives: list, place_type: str
         query_emb = all_results[1]
         populartimes_results = all_results[2:]
         t2 = time.time()
-        print(f"  [1/4] 블로그 크롤링, 쿼리 임베딩, 혼잡도 조회 동시 완료: {t2 - t1:.2f} 초 ({len(places)}개 중 {len(crawling_df)}개 장소)")
+        print(f"  [1/4] 블로그 크롤링, 쿼리 임베딩, 혼잡도 조회 동시 완료: {t2 - t1:.2f} 초 ({len(places)}개 중 {len(crawling_df) if not crawling_df.empty else 0}개 장소)")
+
+        # === KeyError 방어 코드 시작 ===
+        # 크롤링 결과가 비어있는지 먼저 확인합니다.
+        if crawling_df.empty:
+            print("  [경고] 블로그 크롤링 결과가 없어 AI 추천을 건너뛰고 기본 목록을 반환합니다.")
+            # 혼잡도 정보만 추가해서 반환하고 함수를 즉시 종료합니다.
+            contentid_to_populartimes = {
+                place['contentid']: pop_result
+                for place, pop_result in zip(places, populartimes_results)
+            }
+            for place in places:
+                raw_pop_data = contentid_to_populartimes.get(place['contentid'])
+                place['populartimes'] = process_populartimes_data(raw_pop_data)
+            return places
+        # === KeyError 방어 코드 끝 ===
 
         valid_ids = set(crawling_df['contentid'])
         places = [p for p in places if p['contentid'] in valid_ids]
@@ -246,16 +249,13 @@ MAX_PLACES_FOR_AI = 30
 
 class RestaurantListView(AsyncAPIView):
     permission_classes = [AllowAny]
-
     async def get(self, request):
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
         radius = request.query_params.get('radius', '5000')
         adjectives_str = request.query_params.get('adjectives')
-
         if not map_x or not map_y:
             return Response({"error": "mapX, mapY는 필수 파라미터입니다."}, status=status.HTTP_400_BAD_REQUEST)
-
         food_categories = ['A05020100', 'A05020200', 'A05020300', 'A05020400', 'A05020700']
         base_params = {'mapX': map_x, 'mapY': map_y, 'radius': radius, 'numOfRows': '50'}
         async with aiohttp.ClientSession() as session:
@@ -264,7 +264,6 @@ class RestaurantListView(AsyncAPIView):
         all_restaurants = [item for sublist in results for item in sublist]
         unique_restaurants = list({p['contentid']: p for p in all_restaurants}.values())
         sorted_restaurants = sorted(unique_restaurants, key=lambda x: float(x.get('dist', 0)))
-
         if adjectives_str:
             places_for_ai = sorted_restaurants[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
@@ -276,7 +275,6 @@ class RestaurantListView(AsyncAPIView):
 
 class CafeListView(AsyncAPIView):
     permission_classes = [AllowAny]
-
     async def get(self, request):
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
@@ -284,12 +282,10 @@ class CafeListView(AsyncAPIView):
         adjectives_str = request.query_params.get('adjectives')
         if not map_x or not map_y:
             return Response({"error": "mapX, mapY는 필수 파라미터입니다."}, status=status.HTTP_400_BAD_REQUEST)
-
         params = {'mapX': map_x, 'mapY': map_y, 'radius': radius, 'cat3': 'A05020900', 'numOfRows': '50'}
         async with aiohttp.ClientSession() as session:
             cafes = await fetch_restaurants_from_tour_api(session, params)
         sorted_cafes = sorted(cafes, key=lambda x: float(x.get('dist', 0)))
-
         if adjectives_str:
             places_for_ai = sorted_cafes[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
@@ -301,7 +297,6 @@ class CafeListView(AsyncAPIView):
 
 class TouristAttractionListView(AsyncAPIView):
     permission_classes = [AllowAny]
-
     async def get(self, request):
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
@@ -309,12 +304,10 @@ class TouristAttractionListView(AsyncAPIView):
         adjectives_str = request.query_params.get('adjectives')
         if not map_x or not map_y:
             return Response({"error": "mapX, mapY는 필수 파라미터입니다."}, status=status.HTTP_400_BAD_REQUEST)
-
         params = {'mapX': map_x, 'mapY': map_y, 'radius': radius, 'contentTypeId': '12', 'numOfRows': '50'}
         async with aiohttp.ClientSession() as session:
             attractions = await fetch_attractions_from_tour_api(session, params)
         sorted_attractions = sorted(attractions, key=lambda x: float(x.get('dist', 0)))
-
         if adjectives_str:
             places_for_ai = sorted_attractions[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
@@ -326,7 +319,6 @@ class TouristAttractionListView(AsyncAPIView):
 
 class AccommodationListView(AsyncAPIView):
     permission_classes = [AllowAny]
-
     async def get(self, request):
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
@@ -334,12 +326,10 @@ class AccommodationListView(AsyncAPIView):
         adjectives_str = request.query_params.get('adjectives')
         if not map_x or not map_y:
             return Response({"error": "mapX, mapY는 필수 파라미터입니다."}, status=status.HTTP_400_BAD_REQUEST)
-
         params = {'mapX': map_x, 'mapY': map_y, 'radius': radius, 'contentTypeId': '32', 'numOfRows': '50'}
         async with aiohttp.ClientSession() as session:
             accommodations = await fetch_attractions_from_tour_api(session, params)
         sorted_accommodations = sorted(accommodations, key=lambda x: float(x.get('dist', 0)))
-
         if adjectives_str:
             places_for_ai = sorted_accommodations[:MAX_PLACES_FOR_AI]
             adjectives = [adj.strip() for adj in adjectives_str.split(',')]
@@ -377,7 +367,6 @@ def fetch_detail_from_tour_api_sync(content_id):
 
 class TourDetailView(APIView):
     permission_classes = [AllowAny]
-
     def get(self, request, content_id):
         if not content_id:
             return Response({"error": "contentId가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
@@ -390,7 +379,6 @@ class TourDetailView(APIView):
 
 class TripSummaryView(AsyncAPIView):
     permission_classes = [IsAuthenticated]
-
     def _prepare_trip_context(self, trip: Trip, visited_places: list[VisitedContent]) -> str:
         visited_descriptions = []
         if not visited_places:
@@ -401,37 +389,29 @@ class TripSummaryView(AsyncAPIView):
                 visited_descriptions.append(description)
         trip_info = [trip.region, trip.companion, trip.transportation, trip.adjectives, visited_descriptions]
         return trip_info
-
     @sync_to_async
     def _get_trip_and_places(self, trip_id: int, user):
         trip = get_object_or_404(Trip, id=trip_id, user=user)
         visited_places = list(VisitedContent.objects.filter(trip=trip).order_by('created_at'))
         return trip, visited_places
-
     @sync_to_async
     def _save_trip_summary(self, trip: Trip, summary: str):
         trip.summary = summary
         trip.save(update_fields=['summary'])
-
     async def post(self, request, trip_id: int):
         try:
             trip, visited_places = await self._get_trip_and_places(trip_id, request.user)
         except ObjectDoesNotExist:
             return Response({"error": "해당 여행을 찾을 수 없거나 접근 권한이 없습니다."}, status=status.HTTP_404_NOT_FOUND)
-
         if not visited_places:
             return Response({"error": "요약을 생성할 방문 기록이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
-
         trip_info = self._prepare_trip_context(trip, visited_places)
-
         try:
             async with RecommendationEngine() as recomm_engine:
                 summary_text = await recomm_engine.generate_trip_summary(trip_info)
         except Exception as e:
             return Response({"error": f"AI 요약 생성 중 서버 오류 발생: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
         await self._save_trip_summary(trip, summary_text)
-
         return Response({
             "trip_id": trip.id,
             "summary": summary_text

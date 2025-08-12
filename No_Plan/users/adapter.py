@@ -3,14 +3,13 @@
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.account.utils import user_field
 from allauth.account.models import EmailAddress
-from django.contrib.auth import get_user_model  # User 모델을 직접 가져오기 위해 추가
+from django.contrib.auth import get_user_model # User 모델을 직접 가져오기 위해 추가
 
 # User 모델을 가져옵니다.
 User = get_user_model()
 
-
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
-
+    
     def pre_social_login(self, request, sociallogin):
         """
         소셜 로그인이 거의 완료되었을 때 호출되는 훅(hook)입니다.
@@ -28,7 +27,7 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             try:
                 # 해당 이메일을 가진 유저를 찾습니다.
                 user = User.objects.get(email=email)
-
+                
                 # 이 소셜 계정(sociallogin)을 기존 유저(user)와 연결합니다.
                 # allauth는 이 과정에서 SOCIALACCOUNT_LOGIN_ON_EMAIL=True 설정을
                 # 활용하여 자동으로 연결을 처리합니다.
@@ -55,11 +54,11 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         새로운 사용자가 소셜 계정으로 회원가입할 때 사용자 모델 필드를 채우는 함수.
         """
         user = super().populate_user(request, sociallogin, data)
-
+        
         # 닉네임만 채워주는 가장 기본적인 기능만 남깁니다.
         nickname = data.get('properties', {}).get('nickname')
         # user.name이 없을 수도 있으므로 getattr를 사용하여 안전하게 접근합니다.
         if nickname and not getattr(user, 'name', None):
             user_field(user, 'name', nickname)
-
+        
         return user
