@@ -435,7 +435,8 @@ Authorization: Bearer <ACCESS_TOKEN>
     "mapy": "37.5674097516",
     "overview": "...",
     "hashtags": "#포차 #빈티지감성",
-    "recommend_reason": "장안문은 빈티지하면서도 세련된 인테리어..."
+    "recommend_reason": "장안문은 빈티지하면서도 세련된 인테리어...",
+    "category": "식당"
 }
 ```
 
