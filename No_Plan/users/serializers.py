@@ -179,10 +179,12 @@ class BookmarkSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Bookmark
+        ### ▼▼▼ 여기에 'category' 필드가 추가되었습니다 ▼▼▼ ###
         fields = (
             'id', 'user', 'content_id', 'title', 'first_image', 'addr1', 'overview',
-            'created_at', 'hashtags', 'recommend_reason'
+            'created_at', 'hashtags', 'recommend_reason', 'category'
         )
+        ###############################################
         read_only_fields = ('id', 'user', 'created_at')
 
     def validate(self, data):

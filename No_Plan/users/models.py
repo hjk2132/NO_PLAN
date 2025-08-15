@@ -242,6 +242,13 @@ class Bookmark(models.Model):
         blank=True, null=True,
         verbose_name='추천이유'
     )
+    
+    ### ▼▼▼ 여기에 새로운 필드가 추가되었습니다 ▼▼▼ ###
+    category = models.TextField(
+        blank=True, null=True,
+        verbose_name='카테고리'
+    )
+    #############################################
 
     def __str__(self):
         # Admin 페이지 등에서 객체를 쉽게 식별할 수 있도록 문자열 표현을 정의합니다.
