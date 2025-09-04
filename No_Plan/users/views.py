@@ -276,6 +276,19 @@ class VisitedContentListCreateView(generics.ListCreateAPIView):
         if not latest_trip: raise ValidationError({"detail": "여행 기록이 없어 방문지를 추가할 수 없습니다. 여행을 먼저 생성해주세요."})
         serializer.save(user=user, trip=latest_trip)
 
+### ▼▼▼ 여기에 새로운 클래스가 추가되었습니다 ▼▼▼ ###
+class VisitedContentDetailView(generics.RetrieveDestroyAPIView):
+    """
+    특정 방문 기록을 조회(GET)하거나 삭제(DELETE)하는 뷰
+    """
+    serializer_class = VisitedContentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # 사용자는 자신의 방문 기록만 조회/삭제할 수 있도록 쿼리셋을 필터링합니다.
+        return VisitedContent.objects.filter(user=self.request.user)
+### ▲▲▲ 여기까지 추가 ▲▲▲ ###
+
 class BookmarkListCreateView(generics.ListCreateAPIView):
     serializer_class = BookmarkSerializer
     permission_classes = [permissions.IsAuthenticated]

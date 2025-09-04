@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     'users.apps.LogInConfig',
     'tour_api.apps.TourApiConfig',
     'ai.apps.AiConfig',
+    # --- 개인정보처리방침 페이지를 위해 추가한 앱 ---
+    'pages.apps.PagesConfig',
 ]
 
 AUTHENTICATION_BACKENDS = (

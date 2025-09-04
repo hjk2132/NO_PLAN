@@ -261,3 +261,53 @@ class Bookmark(models.Model):
         ordering = ['-created_at']  # 최신순으로 정렬
         # 한 사용자가 동일한 content_id를 중복해서 북마크하는 것을 방지
         unique_together = ('user', 'content_id')
+
+### ▼▼▼ 취급대장 모델 추가 ▼▼▼ ###
+class LocationUsageLog(models.Model):
+    """
+    위치정보 이용 및 제공 사실 기록을 위한 모델 (취급대장)
+    """
+    # 대상: 어떤 사용자인지 식별합니다. User 모델과 연결합니다.
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, # 사용자가 탈퇴해도 로그는 남도록 설정
+        null=True,
+        blank=True,
+        verbose_name='대상 (사용자)'
+    )
+
+    # 취득경로: 현재는 'Android'만 있으므로 기본값으로 설정합니다.
+    acquisition_path = models.CharField(
+        max_length=100,
+        default='Android',
+        verbose_name='취득경로'
+    )
+
+    # 제공 서비스: 어떤 API가 호출되었는지 기록합니다.
+    provided_service = models.CharField(
+        max_length=200,
+        verbose_name='제공 서비스'
+    )
+
+    # 제공받는 자: 위치정보를 전달받는 제3자를 기록합니다.
+    recipient = models.CharField(
+        max_length=200,
+        default='한국관광공사 TOUR_API',
+        verbose_name='제공받는 자'
+    )
+
+    # 이용일시: 로그가 생성된 시점을 자동으로 기록합니다.
+    usage_timestamp = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='이용일시'
+    )
+
+    def __str__(self):
+        # 관리자 페이지에서 각 로그를 쉽게 식별할 수 있도록 표시 형식을 정의합니다.
+        return f'[{self.usage_timestamp.strftime("%Y-%m-%d %H:%M:%S")}] {self.user} - {self.provided_service}'
+
+    class Meta:
+        db_table = 'location_usage_log'
+        verbose_name = '위치정보 이용·제공 기록'
+        verbose_name_plural = '위치정보 이용·제공 기록 (취급대장)'
+        ordering = ['-usage_timestamp'] # 최신순으로 정렬

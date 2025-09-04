@@ -7,7 +7,7 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
 import ssl
 import json
 import pandas as pd
@@ -23,6 +23,7 @@ import livepopulartimes
 
 from ai.services import BlogCrawler, RecommendationEngine
 from users.models import Trip, VisitedContent
+from users.models import LocationUsageLog
 
 
 # ===================================================================
@@ -248,8 +249,20 @@ MAX_PLACES_FOR_AI = 30
 
 
 class RestaurantListView(AsyncAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     async def get(self, request):
+        ### ▼▼▼ 디버깅용 print문 추가 ▼▼▼ ###
+        print("===== LOGGING CHECK (RestaurantListView) =====")
+        print(f"USER: {request.user}")
+        print(f"IS AUTHENTICATED: {request.user.is_authenticated}")
+        print("============================================")
+        ### ▲▲▲ 여기까지 추가 ▲▲▲ ###
+        if request.user.is_authenticated:
+            await sync_to_async(LocationUsageLog.objects.create)(
+                user=request.user,
+                provided_service='주변 식당 AI 추천'
+            )
+        
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
         radius = request.query_params.get('radius', '5000')
@@ -274,8 +287,20 @@ class RestaurantListView(AsyncAPIView):
 
 
 class CafeListView(AsyncAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     async def get(self, request):
+        ### ▼▼▼ 디버깅용 print문 추가 ▼▼▼ ###
+        print("===== LOGGING CHECK (CafeListView) =====")
+        print(f"USER: {request.user}")
+        print(f"IS AUTHENTICATED: {request.user.is_authenticated}")
+        print("========================================")
+        ### ▲▲▲ 여기까지 추가 ▲▲▲ ###
+        if request.user.is_authenticated:
+            await sync_to_async(LocationUsageLog.objects.create)(
+                user=request.user,
+                provided_service='주변 카페 AI 추천'
+            )
+
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
         radius = request.query_params.get('radius', '5000')
@@ -296,8 +321,20 @@ class CafeListView(AsyncAPIView):
 
 
 class TouristAttractionListView(AsyncAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     async def get(self, request):
+        ### ▼▼▼ 디버깅용 print문 추가 ▼▼▼ ###
+        print("===== LOGGING CHECK (TouristAttractionListView) =====")
+        print(f"USER: {request.user}")
+        print(f"IS AUTHENTICATED: {request.user.is_authenticated}")
+        print("===================================================")
+        ### ▲▲▲ 여기까지 추가 ▲▲▲ ###
+        if request.user.is_authenticated:
+            await sync_to_async(LocationUsageLog.objects.create)(
+                user=request.user,
+                provided_service='주변 관광지 AI 추천'
+            )
+
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
         radius = request.query_params.get('radius', '5000')
@@ -318,8 +355,20 @@ class TouristAttractionListView(AsyncAPIView):
 
 
 class AccommodationListView(AsyncAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     async def get(self, request):
+        ### ▼▼▼ 디버깅용 print문 추가 ▼▼▼ ###
+        print("===== LOGGING CHECK (AccommodationListView) =====")
+        print(f"USER: {request.user}")
+        print(f"IS AUTHENTICATED: {request.user.is_authenticated}")
+        print("===============================================")
+        ### ▲▲▲ 여기까지 추가 ▲▲▲ ###
+        if request.user.is_authenticated:
+            await sync_to_async(LocationUsageLog.objects.create)(
+                user=request.user,
+                provided_service='주변 숙소 AI 추천'
+            )
+        
         map_x = request.query_params.get('mapX')
         map_y = request.query_params.get('mapY')
         radius = request.query_params.get('radius', '5000')

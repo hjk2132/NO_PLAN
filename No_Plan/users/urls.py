@@ -8,11 +8,9 @@ from .views import (
     KakaoAPIView, SetNameView, UserInfoView, FindRegionView,
     TripListCreateView, TripDetailView,
     VisitedContentListCreateView, BookmarkListCreateView, BookmarkDetailView,
-    UserWithdrawalView,
-    # ##################################################################
-    # ### ▼▼▼ 여기에 새로운 View가 import 되었습니다 ▼▼▼ ###
-    # ##################################################################
-    KakaoConnectView
+    UserWithdrawalView, KakaoConnectView,
+    ### ▼▼▼ 여기에 새로운 View가 import 되었습니다 ▼▼▼ ###
+    VisitedContentDetailView
 )
 
 urlpatterns = [
@@ -22,9 +20,6 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='rest_logout'),
     path('set_name/', SetNameView.as_view(), name='set_name'),
     path('me/', UserDetailView.as_view(), name='user_detail'),
-    # ##################################################################
-    # ### ▼▼▼ 여기에 새로운 URL 패턴이 추가되었습니다 ▼▼▼ ###
-    # ##################################################################
     path('me/connect-kakao/', KakaoConnectView.as_view(), name='kakao-connect'),
     path('me/withdraw/', UserWithdrawalView.as_view(), name='user-withdrawal'),
     path('me/info/', UserInfoView.as_view(), name='user_info'),
@@ -40,7 +35,11 @@ urlpatterns = [
     # 여행, 방문기록, 북마크
     path('trips/', TripListCreateView.as_view(), name='trip-list-create'),
     path('trips/<int:pk>/', TripDetailView.as_view(), name='trip-detail'),
+    
     path('visited-contents/', VisitedContentListCreateView.as_view(), name='visited-content-list-create'),
+    ### ▼▼▼ 여기에 새로운 URL 패턴이 추가되었습니다 ▼▼▼ ###
+    path('visited-contents/<int:pk>/', VisitedContentDetailView.as_view(), name='visited-content-detail'),
+    
     path('bookmarks/', BookmarkListCreateView.as_view(), name='bookmark-list-create'),
     path('bookmarks/<int:pk>/', BookmarkDetailView.as_view(), name='bookmark-detail'),
 ]
